@@ -1,14 +1,22 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useState } from "react";
 import { Alert, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { RootStackParamList } from "../navigation/types";
 import { Reminder } from "../types/reminder";
 
-type Props = NativeStackScreenProps<RootStackParamList, "ReminderDetail"> & { onComplete: (id: string) => void; onDelete: (id: string) => void };
+type Props = NativeStackScreenProps<RootStackParamList, "ReminderDetail"> & { onComplete: (id: string) => void; onDelete: (id: string) => void; onSnooze: (id: string, until: string) => void };
 
-export function ReminderDetailScreen({ navigation, route, onComplete, onDelete }: Props) {
+export function ReminderDetailScreen({ navigation, route, onComplete, onDelete, onSnooze }: Props) {
   const { reminder } = route.params;
+  const [snoozedUntil, setSnoozedUntil] = useState(reminder.snoozedUntil);
   const location = reminder.location?.name ?? reminder.location?.category;
   const remove = () => Alert.alert("Delete reminder?", "This cannot be undone.", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => { onDelete(reminder.id); navigation.popToTop(); } }]);
+  const snooze = () => Alert.alert("Snooze reminder", "Choose a snooze duration.", [
+    { text: "10 minutes", onPress: () => { const until = new Date(Date.now() + 10 * 60 * 1000).toISOString(); setSnoozedUntil(until); onSnooze(reminder.id, until); } },
+    { text: "1 hour", onPress: () => { const until = new Date(Date.now() + 60 * 60 * 1000).toISOString(); setSnoozedUntil(until); onSnooze(reminder.id, until); } },
+    { text: "Tomorrow", onPress: () => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0); const until = tomorrow.toISOString(); setSnoozedUntil(until); onSnooze(reminder.id, until); } },
+    { text: "Cancel", style: "cancel" },
+  ]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -20,8 +28,10 @@ export function ReminderDetailScreen({ navigation, route, onComplete, onDelete }
           <Detail label="Trigger" value={reminder.triggerType.replaceAll("_", " ")} />
           <Detail label="Deadline" value={reminder.deadline ? new Date(reminder.deadline).toLocaleString() : "Not set"} />
           <Detail label="Location" value={location ?? "Not set"} />
+          <Detail label="Snoozed until" value={snoozedUntil ? new Date(snoozedUntil).toLocaleString() : "Not snoozed"} />
         </View>
         {!reminder.completed && <Pressable style={styles.complete} onPress={() => { onComplete(reminder.id); navigation.goBack(); }}><Text style={styles.completeText}>Mark complete</Text></Pressable>}
+        {!reminder.completed && <Pressable style={styles.snooze} onPress={snooze}><Text style={styles.snoozeText}>Snooze</Text></Pressable>}
         <Pressable style={styles.delete} onPress={remove}><Text style={styles.deleteText}>Delete reminder</Text></Pressable>
       </View>
     </SafeAreaView>
@@ -47,4 +57,6 @@ const styles = StyleSheet.create({
   completeText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
   delete: { alignItems: "center", marginTop: 18, paddingVertical: 12 },
   deleteText: { color: "#B54747", fontSize: 15, fontWeight: "600" },
+  snooze: { alignItems: "center", marginTop: 10, paddingVertical: 12 },
+  snoozeText: { color: "#377D6A", fontSize: 15, fontWeight: "600" },
 });

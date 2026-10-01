@@ -21,3 +21,11 @@ export type Reminder = {
   lastNotifiedAt?: string;
   snoozedUntil?: string;
 };
+
+export type ParsedReminder = {
+  intent: "create_reminder";
+  title: string;
+  deadline?: string;
+  triggerType: ReminderTriggerType;
+  location?: ReminderLocation;
+};

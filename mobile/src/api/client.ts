@@ -1,8 +1,9 @@
-import { Reminder } from "../types/reminder";
+import { ParsedReminder, Reminder } from "../types/reminder";
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type ReminderApi = {
+  parse(text: string): Promise<ParsedReminder>;
   list(): Promise<Reminder[]>;
   create(reminder: Reminder): Promise<Reminder>;
   update(id: string, changes: Partial<Reminder>): Promise<Reminder>;
@@ -13,6 +14,18 @@ export const createReminderApi = (useMocks = true): ReminderApi => {
   let localReminders: Reminder[] = [];
 
   return {
+    async parse(text) {
+      if (!useMocks) {
+        const response = await fetch(`${API_BASE_URL}/parse`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!response.ok) throw new Error("Unable to parse reminder.");
+        return response.json() as Promise<ParsedReminder>;
+      }
+      return mockParse(text);
+    },
     async list() {
       if (useMocks) return [...localReminders];
       const response = await fetch(`${API_BASE_URL}/reminders`);
@@ -58,3 +71,44 @@ export const createReminderApi = (useMocks = true): ReminderApi => {
     },
   };
 };
+
+function mockParse(text: string): ParsedReminder {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) throw new Error("Enter a reminder first.");
+
+  const location = normalized.includes("grocery")
+    ? { type: "category" as const, category: "grocery_store" }
+    : normalized.includes("pharmacy")
+      ? { type: "category" as const, category: "pharmacy" }
+      : normalized.includes("target")
+        ? { type: "place" as const, name: "Target" }
+        : undefined;
+
+  let deadline: string | undefined;
+  const now = new Date();
+  if (normalized.includes("in 30 minutes")) deadline = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
+  else if (normalized.includes("tomorrow")) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(17, 0, 0, 0);
+    deadline = tomorrow.toISOString();
+  } else if (normalized.includes("tonight")) {
+    const tonight = new Date(now);
+    tonight.setHours(20, 0, 0, 0);
+    deadline = tonight.toISOString();
+  }
+
+  const title = normalized
+    .replace(/^remind me to\s*/i, "")
+    .replace(/\s+(when i'm|when i am|tonight|tomorrow|in 30 minutes|at \d{1,2}(?::\d{2})?\s*(am|pm)?)\b.*$/i, "")
+    .trim()
+    .replace(/\.$/, "") || text.trim();
+
+  return {
+    intent: "create_reminder",
+    title: title.charAt(0).toUpperCase() + title.slice(1),
+    deadline,
+    triggerType: location ? (deadline ? "time_and_location" : "location") : "time",
+    location,
+  };
+}
