@@ -8,11 +8,15 @@ import json
 
 from openai import OpenAI
 
-from app import config
+from app import config, usage
 
 
 class LLMError(Exception):
     pass
+
+
+class BudgetError(LLMError):
+    """A spend limit was reached, so the call was refused before reaching Nebius."""
 
 
 _client: OpenAI | None = None
@@ -46,6 +50,10 @@ def extract_json(text: str) -> dict:
 
 def chat_json(messages: list[dict], model: str | None = None) -> dict:
     try:
+        usage.reserve_call()
+    except usage.BudgetExceeded as e:
+        raise BudgetError(str(e)) from e
+    try:
         response = get_client().chat.completions.create(
             model=model or config.NEBIUS_MODEL,
             messages=messages,
@@ -58,4 +66,8 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
     except Exception as e:
         # Includes an empty/None `choices` (content filtering, provider errors).
         raise LLMError(f"Nebius request failed: {type(e).__name__}") from e
+    try:
+        usage.record_tokens(response.usage.total_tokens)
+    except Exception:
+        pass  # a missing usage block must never lose a good reply
     return extract_json(content)

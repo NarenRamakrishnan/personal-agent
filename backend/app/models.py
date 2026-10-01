@@ -207,3 +207,13 @@ class ParsedReminderResponse(ParsedReminder):
     # Extra commitments found in the same text, so typed input never silently
     # drops the second one. Absent when there is only one.
     additional: list[ParsedReminder] | None = None
+
+
+class LlmUsageRow(SQLModel, table=True):
+    """One row per UTC day: how much model usage the backend has spent."""
+
+    __tablename__ = "llm_usage"
+
+    day: str = Field(primary_key=True)  # YYYY-MM-DD, UTC
+    calls: int = 0
+    tokens: int = 0

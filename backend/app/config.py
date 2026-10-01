@@ -30,3 +30,10 @@ def parser_mode() -> str:
 # unchanged. Set it before deploying anywhere public, then have the app send
 # it as an `X-API-Key` header.
 API_KEY = os.getenv("API_KEY", "")
+
+
+# Spend guard: our own hard stop, because Nebius Token Factory has no budget cap.
+# Counted per UTC day in the database. Set a limit to 0 to disable that check.
+LLM_DAILY_CALL_LIMIT = int(os.getenv("LLM_DAILY_CALL_LIMIT", "400"))
+LLM_DAILY_TOKEN_LIMIT = int(os.getenv("LLM_DAILY_TOKEN_LIMIT", "400000"))
+LLM_CALLS_PER_MINUTE = int(os.getenv("LLM_CALLS_PER_MINUTE", "60"))
