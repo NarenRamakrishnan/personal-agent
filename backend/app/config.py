@@ -23,3 +23,9 @@ def parser_mode() -> str:
     if PARSER_MODE == "auto":
         return "nebius" if NEBIUS_API_KEY else "mock"
     return PARSER_MODE
+
+
+# Optional shared secret. Off by default so local dev and the mobile app work
+# unchanged. Set it before deploying anywhere public, then have the app send
+# it as an `X-API-Key` header.
+API_KEY = os.getenv("API_KEY", "")

@@ -149,8 +149,11 @@ class Action(ApiModel):
     created_at: datetime
 
 
+MAX_TEXT_CHARS = 5000
+
+
 class ParseRequest(ApiModel):
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
     session_id: str | None = None
     # The phone's current time and timezone, so "tonight" and "Friday" resolve
     # against the person's day and not the server's.
@@ -161,3 +164,21 @@ class ParseRequest(ApiModel):
 class ParseResponse(ApiModel):
     session_id: str
     reminders: list[Reminder]
+
+
+class ParsedReminder(ApiModel):
+    """What POST /parse returns: one unsaved reminder, in the shape the phone's
+    ParsedReminder type (mobile/src/types/reminder.ts) expects. The phone shows
+    its confirm screen and then POSTs /reminders itself."""
+
+    intent: Literal["create_reminder"] = "create_reminder"
+    title: str
+    deadline: datetime | None = None
+    trigger_type: TriggerType
+    location: Location | None = None
+
+
+class ParsedReminderResponse(ParsedReminder):
+    # Extra commitments found in the same text, so typed input never silently
+    # drops the second one. Absent when there is only one.
+    additional: list[ParsedReminder] | None = None

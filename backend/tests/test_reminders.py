@@ -1,9 +1,4 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session
-
-from app.db import get_session, init_db, make_engine
-from app.main import app
+from app import config
 
 # Copied verbatim from mobile/src/data/mockReminders.ts so the contract is
 # tested against what the phone really sends.
@@ -25,21 +20,6 @@ MOBILE_MOCK_2 = {
     "location": {"type": "place", "name": "Public Library"},
     "completed": False,
 }
-
-
-@pytest.fixture()
-def client():
-    engine = make_engine("sqlite://")
-    init_db(engine)
-
-    def override():
-        with Session(engine) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override
-    # No `with`: skip the lifespan so the real on-disk database is never touched.
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def test_health(client):
@@ -131,8 +111,8 @@ def test_saved_place_location_is_accepted(client):
     assert r.status_code == 201
 
 
-def test_mock_parse_saves_into_a_session(client):
-    r = client.post("/parse", json={"text": "remind me to call Mom in an hour"})
+def test_session_parse_saves_into_a_session(client):
+    r = client.post("/sessions/parse", json={"text": "remind me to call Mom in an hour"})
     assert r.status_code == 200
     body = r.json()
     assert body["sessionId"] and len(body["reminders"]) == 1
@@ -141,6 +121,51 @@ def test_mock_parse_saves_into_a_session(client):
     assert saved[0]["sourceText"] == "remind me to call Mom in an hour"
 
 
-def test_parse_keeps_a_given_session_id(client):
-    r = client.post("/parse", json={"text": "buy eggs", "sessionId": "s1"}).json()
+def test_session_parse_keeps_a_given_session_id(client):
+    r = client.post("/sessions/parse", json={"text": "buy eggs", "sessionId": "s1"}).json()
     assert r["sessionId"] == "s1"
+
+
+def test_parse_is_flat_and_saves_nothing(client):
+    r = client.post("/parse", json={"text": "remind me to call Mom in an hour"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["intent"] == "create_reminder" and body["title"]
+    assert "reminders" not in body and "id" not in body
+    assert client.get("/reminders").json() == []  # nothing saved; the phone confirms first
+
+
+def test_parse_with_nothing_to_remind_is_422(client, monkeypatch):
+    monkeypatch.setattr("app.parser.parse", lambda *a, **k: [])
+    assert client.post("/parse", json={"text": "nice weather"}).status_code == 422
+
+
+def test_parse_returns_extra_commitments_in_additional(client, monkeypatch):
+    from app.models import ReminderCreate
+
+    two = [ReminderCreate(title="A", trigger_type="time"), ReminderCreate(title="B", trigger_type="time")]
+    monkeypatch.setattr("app.parser.parse", lambda *a, **k: two)
+    body = client.post("/parse", json={"text": "a and b"}).json()
+    assert body["title"] == "A" and [x["title"] for x in body["additional"]] == ["B"]
+
+
+def test_text_too_long_is_422(client):
+    assert client.post("/parse", json={"text": "x" * 5001}).status_code == 422
+
+
+def test_list_pagination(client):
+    for i in range(5):
+        client.post("/reminders", json={"id": f"r{i}", "title": "t", "triggerType": "time",
+                                         "createdAt": f"2026-10-0{i + 1}T00:00:00Z"})
+    page = client.get("/reminders", params={"limit": 2, "offset": 1}).json()
+    assert [x["id"] for x in page] == ["r3", "r2"]
+    assert client.get("/reminders", params={"limit": 0}).status_code == 422
+
+
+def test_api_key_is_enforced_only_when_set(client, monkeypatch):
+    assert client.get("/reminders").status_code == 200
+    monkeypatch.setattr(config, "API_KEY", "secret")
+    assert client.get("/reminders").status_code == 401
+    assert client.get("/reminders", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/reminders", headers={"X-API-Key": "secret"}).status_code == 200
+    assert client.get("/health").status_code == 200  # health stays open
