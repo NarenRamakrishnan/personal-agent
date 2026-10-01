@@ -19,6 +19,12 @@ LocationType = Literal["coordinate", "place", "category", "saved_place"]
 # The internal taxonomy (grocery_store, pharmacy, gym ...) lives in Module 07.
 
 
+def require_tz(v: datetime | None) -> datetime | None:
+    if v is not None and v.tzinfo is None:
+        raise ValueError("datetime must include a timezone offset")
+    return v
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -88,6 +94,10 @@ class ReminderCreate(ReminderBase):
     last_notified_at: datetime | None = None
     snoozed_until: datetime | None = None
 
+    _tz = field_validator("created_at", "last_notified_at", "snoozed_until")(
+        lambda cls, v: require_tz(v)
+    )
+
 
 class Reminder(ReminderBase):
     id: str
@@ -98,7 +108,7 @@ class Reminder(ReminderBase):
 
 
 class ReminderUpdate(ApiModel):
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1)
     description: str | None = None
     deadline: datetime | None = None
     trigger_type: TriggerType | None = None
@@ -106,6 +116,10 @@ class ReminderUpdate(ApiModel):
     completed: bool | None = None
     last_notified_at: datetime | None = None
     snoozed_until: datetime | None = None
+
+    _tz = field_validator("deadline", "last_notified_at", "snoozed_until")(
+        lambda cls, v: require_tz(v)
+    )
 
 
 class ReminderRow(SQLModel, table=True):
@@ -153,6 +167,10 @@ MAX_TEXT_CHARS = 5000
 
 
 class ParseRequest(ApiModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, str_strip_whitespace=True
+    )
+
     text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
     session_id: str | None = None
     # The phone's current time and timezone, so "tonight" and "Friday" resolve

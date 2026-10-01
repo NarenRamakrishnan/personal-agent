@@ -64,8 +64,13 @@ def build_messages(text: str, now: datetime, tz: ZoneInfo) -> list[dict]:
     return [{"role": "system", "content": system}, {"role": "user", "content": text}]
 
 
-def _coerce(item: dict, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCreate:
-    item = dict(item)
+# Only these model-supplied fields are trusted. id, createdAt, completed and the
+# rest come from the server, so a bad or injected reply can't set them.
+MODEL_FIELDS = ("title", "description", "deadline", "triggerType", "location")
+
+
+def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCreate:
+    item = {k: raw[k] for k in MODEL_FIELDS if k in raw}
     deadline = item.get("deadline")
     if isinstance(deadline, str) and deadline:
         parsed = datetime.fromisoformat(deadline.replace("Z", "+00:00"))
@@ -86,7 +91,6 @@ def _coerce(item: dict, tz: ZoneInfo, session_id: str, source_text: str) -> Remi
         item["triggerType"] = "location"
     elif item.get("triggerType") != "time":
         item["triggerType"] = "time"
-    item.pop("sessionId", None)
     return ReminderCreate.model_validate(
         {**item, "sessionId": session_id, "sourceText": source_text}
     )
@@ -133,13 +137,26 @@ def parse_mock(text: str, now: datetime, session_id: str) -> list[ReminderCreate
 
 
 def parse(
-    text: str, now: datetime | None, session_id: str, tz_name: str | None = None
+    text: str,
+    now: datetime | None,
+    session_id: str,
+    tz_name: str | None = None,
+    fallback: bool = True,
 ) -> list[ReminderCreate]:
+    """Parse text into candidate reminders.
+
+    fallback=True (typed input): if the model fails, keep what the person typed
+    as a reminder for them to fix. fallback=False (always-listening chunks):
+    re-raise, because most chunks are chatter and a fallback would turn every
+    one of them into a junk reminder.
+    """
     now = now or datetime.now(timezone.utc)
     if config.parser_mode() == "mock":
         return parse_mock(text, now, session_id)
     try:
         return parse_llm(text, now, resolve_tz(tz_name), session_id)
     except llm.LLMError as e:
-        log.warning("LLM parse failed, using fallback: %s", e)
+        log.warning("LLM parse failed: %s", e)
+        if not fallback:
+            raise
         return parse_fallback(text, session_id)

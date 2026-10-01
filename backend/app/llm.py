@@ -52,9 +52,10 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
             temperature=0,
             response_format={"type": "json_object"},
         )
+        content = response.choices[0].message.content or ""
     except LLMError:
         raise
     except Exception as e:
+        # Includes an empty/None `choices` (content filtering, provider errors).
         raise LLMError(f"Nebius request failed: {type(e).__name__}") from e
-    content = response.choices[0].message.content or ""
     return extract_json(content)

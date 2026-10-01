@@ -3,7 +3,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BACKEND_DIR / ".env")
 
 # Defaults from Nebius's own cookbook (nebius/token-factory-cookbook, nemotron3-super-120B.md).
 NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY", "")
@@ -14,7 +15,7 @@ NEBIUS_MODEL = os.getenv("NEBIUS_MODEL", "nvidia/nemotron-3-super-120b-a12b")
 PARSER_MODE = os.getenv("PARSER_MODE", "auto")
 
 # Local SQLite for now. Point this at Supabase Postgres when we deploy.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./commitments.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BACKEND_DIR / 'commitments.db'}")
 
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_TIMEZONE", "America/New_York")
 

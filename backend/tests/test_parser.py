@@ -148,3 +148,65 @@ def test_thirty_phrases_live(monkeypatch):
 @pytest.mark.parametrize("bad", ["../../etc/passwd", "/etc/localtime", "Mars/Olympus", "UTC\x00"])
 def test_hostile_timezone_never_raises(bad):
     assert str(parser.resolve_tz(bad)) == config.DEFAULT_TIMEZONE
+
+
+def test_model_cannot_set_server_fields(monkeypatch):
+    out = run(monkeypatch, {"reminders": [
+        {"title": "A", "triggerType": "time", "id": "dup", "completed": True,
+         "createdAt": "2000-01-01T00:00:00Z", "sessionId": "evil", "sourceText": "evil"},
+        {"title": "B", "triggerType": "time", "id": "dup"}]})
+    assert [r.id for r in out] == [None, None]
+    assert out[0].completed is False and out[0].session_id == "s1" and out[0].source_text == "anything"
+    assert out[0].created_at is None
+
+
+def test_llm_failure_without_fallback_raises(monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: (_ for _ in ()).throw(llm.LLMError("x")))
+    with pytest.raises(llm.LLMError):
+        parser.parse("chatter", NOW, "s1", TZ, fallback=False)
+    assert len(parser.parse("typed", NOW, "s1", TZ, fallback=True)) == 1
+
+
+@pytest.mark.parametrize("choices", [[], None])
+def test_empty_choices_becomes_llm_error(monkeypatch, choices):
+    from types import SimpleNamespace
+
+    create = lambda **k: SimpleNamespace(choices=choices)  # noqa: E731
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(llm, "get_client", lambda: fake)
+    with pytest.raises(llm.LLMError):
+        llm.chat_json([{"role": "user", "content": "x"}])
+
+
+def test_session_route_saves_nothing_and_503s_when_the_model_fails(client, monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: (_ for _ in ()).throw(llm.LLMError("x")))
+    r = client.post("/sessions/parse", json={"text": "just chatting about lunch"})
+    assert r.status_code == 503
+    assert client.get("/reminders").json() == []
+    # typed input still keeps what the person typed
+    typed = client.post("/parse", json={"text": "call the bank"})
+    assert typed.status_code == 200 and typed.json()["title"] == "call the bank"
+
+
+def test_duplicate_ids_from_the_model_do_not_break_a_session(client, monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: {"reminders": [
+        {"title": "A", "triggerType": "time", "id": "dup"},
+        {"title": "B", "triggerType": "time", "id": "dup"}]})
+    r = client.post("/sessions/parse", json={"text": "a and b"})
+    assert r.status_code == 200 and len(r.json()["reminders"]) == 2
+
+
+SAVED = {"reminders": [{"title": "Feed cat", "triggerType": "location",
+                        "location": {"type": "saved_place", "name": "home"}}]}
+
+
+def test_saved_place_is_sent_to_the_phone_as_a_named_place_for_now(client, monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: SAVED)
+    flat = client.post("/parse", json={"text": "x"}).json()
+    assert flat["location"] == {"type": "place", "name": "home"}  # fits the phone's current union
+    stored = client.post("/sessions/parse", json={"text": "x"}).json()["reminders"][0]
+    assert stored["location"]["type"] == "saved_place"  # the backend keeps the real meaning

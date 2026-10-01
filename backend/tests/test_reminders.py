@@ -46,9 +46,18 @@ def test_location_reminder_round_trips(client):
     assert body["location"] == {"type": "place", "name": "Public Library"}
 
 
-def test_duplicate_id_is_409(client):
+def test_retrying_the_same_create_is_idempotent(client):
+    first = client.post("/reminders", json=MOBILE_MOCK_1)
+    again = client.post("/reminders", json=MOBILE_MOCK_1)  # lost response, phone retries
+    assert (first.status_code, again.status_code) == (201, 200)
+    assert again.json() == first.json()
+    assert len(client.get("/reminders").json()) == 1
+
+
+def test_same_id_different_reminder_is_409(client):
     client.post("/reminders", json=MOBILE_MOCK_1)
-    assert client.post("/reminders", json=MOBILE_MOCK_1).status_code == 409
+    other = {**MOBILE_MOCK_1, "title": "Something else"}
+    assert client.post("/reminders", json=other).status_code == 409
 
 
 def test_create_without_id_generates_one(client):
@@ -182,3 +191,70 @@ def test_naive_now_is_422_not_500(client, path):
 @pytest.mark.parametrize("path", ["/parse", "/sessions/parse"])
 def test_overlong_timezone_is_422(client, path):
     assert client.post(path, json={"text": "x", "timezone": "a" * 65}).status_code == 422
+
+
+# ---- code-review regressions ------------------------------------------------
+
+def test_patch_cannot_store_an_unreadable_reminder(client):
+    client.post("/reminders", json={"id": "a", "title": "t", "triggerType": "time"})
+    client.post("/reminders", json=MOBILE_MOCK_2)
+    # time -> location with no location
+    assert client.patch("/reminders/a", json={"triggerType": "location"}).status_code == 422
+    # removing the location from a location reminder
+    assert client.patch("/reminders/mock-2", json={"location": None}).status_code == 422
+    # blank title
+    assert client.patch("/reminders/a", json={"title": ""}).status_code == 422
+    # nothing was stored, so the list still works
+    assert client.get("/reminders").status_code == 200
+    assert len(client.get("/reminders").json()) == 2
+
+
+def test_patch_that_keeps_it_valid_still_works(client):
+    client.post("/reminders", json={"id": "a", "title": "t", "triggerType": "time"})
+    r = client.patch("/reminders/a", json={
+        "triggerType": "location", "location": {"type": "place", "name": "Target"}})
+    assert r.status_code == 200 and r.json()["location"]["name"] == "Target"
+
+
+def test_one_corrupt_row_does_not_take_down_the_list(client):
+    from sqlmodel import Session
+
+    from app.db import get_session
+    from app.main import app
+    from app.models import ReminderRow
+
+    client.post("/reminders", json={"id": "good", "title": "ok", "triggerType": "time"})
+    db = next(app.dependency_overrides[get_session]())
+    db.add(ReminderRow(id="bad", title="x", trigger_type="location", location=None))
+    db.commit()
+    assert [r["id"] for r in client.get("/reminders").json()] == ["good"]
+
+
+@pytest.mark.parametrize("field", ["createdAt", "snoozedUntil", "lastNotifiedAt"])
+def test_naive_datetimes_on_create_are_422(client, field):
+    body = {"title": "t", "triggerType": "time", field: "2026-10-01T10:00:00"}
+    assert client.post("/reminders", json=body).status_code == 422
+
+
+@pytest.mark.parametrize("field", ["deadline", "snoozedUntil", "lastNotifiedAt"])
+def test_naive_datetimes_on_patch_are_422(client, field):
+    client.post("/reminders", json={"id": "a", "title": "t", "triggerType": "time"})
+    assert client.patch("/reminders/a", json={field: "2026-10-01T10:00:00"}).status_code == 422
+
+
+@pytest.mark.parametrize("path", ["/parse", "/sessions/parse"])
+def test_whitespace_only_text_is_422(client, path):
+    assert client.post(path, json={"text": "   \n "}).status_code == 422
+
+
+def test_non_ascii_api_key_header_is_401_not_500(client, monkeypatch):
+    monkeypatch.setattr(config, "API_KEY", "secret")
+    r = client.get("/reminders", headers={"X-API-Key": "caf\u00e9".encode("latin-1")})
+    assert r.status_code == 401
+
+
+def test_default_database_path_is_absolute():
+    from pathlib import Path
+
+    assert Path(config.BACKEND_DIR).is_absolute()
+    assert str(config.BACKEND_DIR) in f"sqlite:///{config.BACKEND_DIR / 'commitments.db'}"

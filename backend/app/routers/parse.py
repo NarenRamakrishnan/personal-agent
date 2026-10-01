@@ -3,9 +3,10 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from app import parser
+from app import llm, parser
 from app.db import get_session
 from app.models import (
+    Location,
     ParsedReminder,
     ParsedReminderResponse,
     ParseRequest,
@@ -19,9 +20,21 @@ from app.security import require_api_key
 router = APIRouter(tags=["parse"], dependencies=[Depends(require_api_key)])
 
 
+def phone_location(loc: Location | None) -> Location | None:
+    """The phone's ReminderLocation.type doesn't know 'saved_place' yet, so send
+    "home" as a named place until mobile/src/types/reminder.ts adds it. Remove
+    this shim once test_phone_type_knows_saved_place stops xfailing."""
+    if loc is not None and loc.type == "saved_place":
+        return Location(type="place", name=loc.name)
+    return loc
+
+
 def to_parsed(c: ReminderCreate) -> ParsedReminder:
     return ParsedReminder(
-        title=c.title, deadline=c.deadline, trigger_type=c.trigger_type, location=c.location
+        title=c.title,
+        deadline=c.deadline,
+        trigger_type=c.trigger_type,
+        location=phone_location(c.location),
     )
 
 
@@ -43,7 +56,14 @@ def parse_into_session(body: ParseRequest, db: Session = Depends(get_session)):
     """Always-listening input: parse every commitment in the text and save them
     under a session, ready for the end-of-session review list."""
     session_id = body.session_id or str(uuid.uuid4())
-    candidates = parser.parse(body.text, body.now or utcnow(), session_id, body.timezone)
+    try:
+        candidates = parser.parse(
+            body.text, body.now or utcnow(), session_id, body.timezone, fallback=False
+        )
+    except llm.LLMError:
+        # Nothing is saved. The app keeps the chunk and retries instead of the
+        # session filling with a junk reminder per failed chunk.
+        raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
     rows = [row_from_create(c) for c in candidates]
     db.add_all(rows)
     db.commit()
