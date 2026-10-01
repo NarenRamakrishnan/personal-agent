@@ -1,0 +1,60 @@
+"""The one place the backend talks to a model.
+
+Everything goes through Nebius Token Factory's OpenAI-compatible API, so
+swapping models is a config change and not a code change.
+"""
+
+import json
+
+from openai import OpenAI
+
+from app import config
+
+
+class LLMError(Exception):
+    pass
+
+
+_client: OpenAI | None = None
+
+
+def get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        if not config.NEBIUS_API_KEY:
+            raise LLMError("NEBIUS_API_KEY is not set")
+        _client = OpenAI(base_url=config.NEBIUS_BASE_URL, api_key=config.NEBIUS_API_KEY, timeout=60)
+    return _client
+
+
+def extract_json(text: str) -> dict:
+    """Pull the JSON object out of a reply.
+
+    Nemotron 3 Super is a reasoning model and can put thinking text before the
+    answer, so take the outermost {...} rather than trusting the whole reply.
+    """
+    if "</think>" in text:
+        text = text.split("</think>", 1)[1]
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise LLMError("model reply had no JSON object")
+    try:
+        return json.loads(text[start : end + 1])
+    except json.JSONDecodeError as e:
+        raise LLMError(f"model reply was not valid JSON: {e}") from e
+
+
+def chat_json(messages: list[dict], model: str | None = None) -> dict:
+    try:
+        response = get_client().chat.completions.create(
+            model=model or config.NEBIUS_MODEL,
+            messages=messages,
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+    except LLMError:
+        raise
+    except Exception as e:
+        raise LLMError(f"Nebius request failed: {type(e).__name__}") from e
+    content = response.choices[0].message.content or ""
+    return extract_json(content)
