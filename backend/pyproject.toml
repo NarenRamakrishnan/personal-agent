@@ -20,3 +20,5 @@ dev = [
 [tool.pytest.ini_options]
 markers = ["live: calls the real Nebius API (needs NEBIUS_API_KEY)"]
 pythonpath = ["."]
+# Live tests call Nebius and spend credits. Run them on purpose with: pytest -m live -s
+addopts = "-m 'not live'"

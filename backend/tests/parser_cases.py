@@ -3,7 +3,7 @@
 All cases are judged as if "now" is Thu 2026-10-01 14:00 in America/New_York.
 Each `expect` only states what the phrase clearly implies, so a correct parse
 is not marked wrong for a reasonable choice (e.g. what "tonight" means).
-Keys: n (reminder count), trigger, date (local YYYY-MM-DD), hour (local),
+Keys: n (reminder count), trigger, date / date_in (local YYYY-MM-DD), hour (local),
 no_deadline, loc_type, loc_category, loc_name, title_has.
 """
 
@@ -24,7 +24,9 @@ CASES = [
     # --- weekdays and dates
     ("remind me Friday to pay rent", {"trigger": "time", "date": "2026-10-02"}),
     ("Saturday at 3 pm I have soccer practice, remind me", {"trigger": "time", "date": "2026-10-03", "hour": 15}),
-    ("remind me to call the dentist next Monday", {"trigger": "time", "date": "2026-10-05"}),
+    # On a Thursday "next Monday" honestly means Oct 5 or Oct 12, so accept both.
+    ("remind me to call the dentist next Monday",
+     {"trigger": "time", "date_in": ["2026-10-05", "2026-10-12"]}),
     ("remind me on October 15 to register for classes", {"trigger": "time", "date": "2026-10-15"}),
     ("don't forget to turn in the lab by Friday at noon", {"trigger": "time", "date": "2026-10-02", "hour": 12}),
     # --- no deadline

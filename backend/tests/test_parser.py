@@ -6,6 +6,7 @@ import pytest
 
 from app import config, llm, parser
 from tests.parser_cases import CASES, NOW_LOCAL, TZ
+from tests.parser_cases_heldout import HELDOUT
 
 NOW = datetime.fromisoformat(NOW_LOCAL).replace(tzinfo=ZoneInfo(TZ))
 NY = ZoneInfo(TZ)
@@ -78,6 +79,9 @@ def test_extract_json_handles_thinking_text_and_fences():
 def test_prompt_carries_local_time_and_weekday():
     system = parser.build_messages("hi", NOW, NY)[0]["content"]
     assert "2026-10-01 14:00" in system and "Thursday" in system and "America/New_York" in system
+    # the precomputed calendar the model reads weekdays from
+    assert "Thu 2026-10-01 (today)" in system and "Fri 2026-10-02 (tomorrow)" in system
+    assert "Mon 2026-10-05" in system and "Thu 2026-10-15" in system
 
 
 def test_unknown_timezone_does_not_crash():
@@ -99,6 +103,8 @@ def check(expect, reminders):
         return f"trigger {r.trigger_type} != {expect['trigger']}"
     if expect.get("no_deadline") and r.deadline is not None:
         return f"expected no deadline, got {r.deadline}"
+    if "date_in" in expect and (r.deadline is None or f"{r.deadline.astimezone(NY):%Y-%m-%d}" not in expect["date_in"]):
+        return f"date {r.deadline and r.deadline.astimezone(NY):%Y-%m-%d} not in {expect['date_in']}"
     if "date" in expect or "hour" in expect:
         if r.deadline is None:
             return "expected a deadline"
@@ -210,3 +216,24 @@ def test_saved_place_is_sent_to_the_phone_as_a_named_place_for_now(client, monke
     assert flat["location"] == {"type": "place", "name": "home"}  # fits the phone's current union
     stored = client.post("/sessions/parse", json={"text": "x"}).json()["reminders"][0]
     assert stored["location"]["type"] == "saved_place"  # the backend keeps the real meaning
+
+
+def run_live(cases):
+    failures = []
+    for text, expect in cases:
+        got = parser.parse_llm(text, NOW, NY, "live")
+        reason = check(expect, got)
+        if reason:
+            failures.append(f"{text!r}: {reason}")
+    return len(cases) - len(failures), failures
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not os.getenv("NEBIUS_API_KEY"), reason="needs NEBIUS_API_KEY")
+def test_heldout_phrases_live(monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    passed, failures = run_live(HELDOUT)
+    print(f"\nheld-out parser: {passed}/{len(HELDOUT)} passed")
+    for f in failures:
+        print("  FAIL", f)
+    assert passed >= 10, f"only {passed}/{len(HELDOUT)} passed"

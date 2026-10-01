@@ -24,6 +24,9 @@ SYSTEM_PROMPT = """You extract reminders from what a person said out loud.
 
 Current local time: {now_local} ({weekday}), timezone {tz}.
 
+Calendar for the next two weeks (use it for every weekday and relative-day; do not work dates out yourself):
+{calendar}
+
 Return ONLY a JSON object: {{"reminders": [ ... ]}}. Each reminder has:
 - "title": short imperative, e.g. "Call Mom". No "remind me to".
 - "description": optional extra detail, or null.
@@ -38,9 +41,12 @@ Rules:
 - If the person says nothing that is a task or commitment (chat, questions, opinions, small talk), return {{"reminders": []}}.
 - One reminder per distinct commitment. Split "do A and do B" into two.
 - Resolve relative words against the current local time above: "tonight" is today evening (use 20:00 unless a time is given), "tomorrow morning" is 09:00 tomorrow, a bare weekday is its next occurrence, "next Monday" is the Monday of next week.
+- A day with no time ("tomorrow", "Friday", "on Monday", "next week") is 09:00 that day.
+- Parts of a day: morning 09:00, afternoon 15:00, evening 18:00, tonight or night 20:00.
 - If a time is only vague ("sometime", "eventually") leave deadline null. Never invent a time the person did not imply.
 - A reminder with a place and no time is triggerType "location" with deadline null.
 - Never invent a place. Only fill "location" if a place was said.
+- Only add a location when the person wants to be reminded when they are at, near, arriving at or leaving a place ("when I'm at the gym", "at the pharmacy", "near Target", "when I get home"). Merely going somewhere is the task and not a trigger: "go to the gym tomorrow at 9" is a time reminder with no location.
 """
 
 
@@ -56,10 +62,20 @@ def resolve_tz(name: str | None) -> ZoneInfo:
     return ZoneInfo("UTC")
 
 
+def calendar_lines(local: datetime, days: int = 15) -> str:
+    names = {0: " (today)", 1: " (tomorrow)"}
+    return "\n".join(
+        f"{(local + timedelta(days=i)):%a %Y-%m-%d}{names.get(i, '')}" for i in range(days)
+    )
+
+
 def build_messages(text: str, now: datetime, tz: ZoneInfo) -> list[dict]:
     local = now.astimezone(tz)
     system = SYSTEM_PROMPT.format(
-        now_local=local.strftime("%Y-%m-%d %H:%M"), weekday=local.strftime("%A"), tz=str(tz)
+        now_local=local.strftime("%Y-%m-%d %H:%M"),
+        weekday=local.strftime("%A"),
+        tz=str(tz),
+        calendar=calendar_lines(local),
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": text}]
 
