@@ -23,7 +23,7 @@ def get_client() -> OpenAI:
     if _client is None:
         if not config.NEBIUS_API_KEY:
             raise LLMError("NEBIUS_API_KEY is not set")
-        _client = OpenAI(base_url=config.NEBIUS_BASE_URL, api_key=config.NEBIUS_API_KEY, timeout=60)
+        _client = OpenAI(base_url=config.NEBIUS_BASE_URL, api_key=config.NEBIUS_API_KEY, timeout=30, max_retries=1)
     return _client
 
 

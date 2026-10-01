@@ -49,8 +49,10 @@ def resolve_tz(name: str | None) -> ZoneInfo:
         if candidate:
             try:
                 return ZoneInfo(candidate)
-            except ZoneInfoNotFoundError:
-                log.warning("unknown timezone %r", candidate)
+            except (ZoneInfoNotFoundError, ValueError):
+                # ValueError is what ZoneInfo raises for path-like keys such as
+                # "../x" or "/etc/localtime". Don't log the client's string.
+                log.warning("unusable timezone ignored")
     return ZoneInfo("UTC")
 
 

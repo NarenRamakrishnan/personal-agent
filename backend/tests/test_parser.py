@@ -143,3 +143,8 @@ def test_thirty_phrases_live(monkeypatch):
     for f in failures:
         print("  FAIL", f)
     assert passed >= 25, f"only {passed}/30 passed"
+
+
+@pytest.mark.parametrize("bad", ["../../etc/passwd", "/etc/localtime", "Mars/Olympus", "UTC\x00"])
+def test_hostile_timezone_never_raises(bad):
+    assert str(parser.resolve_tz(bad)) == config.DEFAULT_TIMEZONE

@@ -1,3 +1,5 @@
+import pytest
+
 from app import config
 
 # Copied verbatim from mobile/src/data/mockReminders.ts so the contract is
@@ -169,3 +171,14 @@ def test_api_key_is_enforced_only_when_set(client, monkeypatch):
     assert client.get("/reminders", headers={"X-API-Key": "wrong"}).status_code == 401
     assert client.get("/reminders", headers={"X-API-Key": "secret"}).status_code == 200
     assert client.get("/health").status_code == 200  # health stays open
+
+
+@pytest.mark.parametrize("path", ["/parse", "/sessions/parse"])
+def test_naive_now_is_422_not_500(client, path):
+    r = client.post(path, json={"text": "x", "now": "2026-10-01T14:00:00"})
+    assert r.status_code == 422
+
+
+@pytest.mark.parametrize("path", ["/parse", "/sessions/parse"])
+def test_overlong_timezone_is_422(client, path):
+    assert client.post(path, json={"text": "x", "timezone": "a" * 65}).status_code == 422

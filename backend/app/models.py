@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from sqlalchemy import JSON, Column, DateTime, TypeDecorator
 from sqlmodel import Field, SQLModel
@@ -158,7 +158,14 @@ class ParseRequest(ApiModel):
     # The phone's current time and timezone, so "tonight" and "Friday" resolve
     # against the person's day and not the server's.
     now: datetime | None = None
-    timezone: str | None = None
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("now")
+    @classmethod
+    def now_needs_offset(cls, v):
+        if v is not None and v.tzinfo is None:
+            raise ValueError("now must include a timezone offset")
+        return v
 
 
 class ParseResponse(ApiModel):
