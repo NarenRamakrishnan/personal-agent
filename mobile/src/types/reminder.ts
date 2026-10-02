@@ -1,7 +1,7 @@
 export type ReminderTriggerType = "time" | "location" | "time_and_location";
 
 export type ReminderLocation = {
-  type: "coordinate" | "place" | "category";
+  type: "coordinate" | "place" | "category" | "saved_place";
   name?: string;
   category?: string;
   latitude?: number;

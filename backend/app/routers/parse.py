@@ -6,7 +6,6 @@ from sqlmodel import Session
 from app import llm, parser, sessions
 from app.db import get_session
 from app.models import (
-    Location,
     ParsedReminder,
     ParsedReminderResponse,
     ParseRequest,
@@ -20,21 +19,12 @@ from app.security import require_api_key
 router = APIRouter(tags=["parse"], dependencies=[Depends(require_api_key)])
 
 
-def phone_location(loc: Location | None) -> Location | None:
-    """The phone's ReminderLocation.type doesn't know 'saved_place' yet, so send
-    "home" as a named place until mobile/src/types/reminder.ts adds it. Remove
-    this shim once test_phone_type_knows_saved_place stops xfailing."""
-    if loc is not None and loc.type == "saved_place":
-        return Location(type="place", name=loc.name)
-    return loc
-
-
 def to_parsed(c: ReminderCreate) -> ParsedReminder:
     return ParsedReminder(
         title=c.title,
         deadline=c.deadline,
         trigger_type=c.trigger_type,
-        location=phone_location(c.location),
+        location=c.location,
     )
 
 

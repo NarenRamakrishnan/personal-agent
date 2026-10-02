@@ -209,13 +209,13 @@ SAVED = {"reminders": [{"title": "Feed cat", "triggerType": "location",
                         "location": {"type": "saved_place", "name": "home"}}]}
 
 
-def test_saved_place_is_sent_to_the_phone_as_a_named_place_for_now(client, monkeypatch):
+def test_saved_place_reaches_the_phone_unchanged(client, monkeypatch):
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "chat_json", lambda *a, **k: SAVED)
     flat = client.post("/parse", json={"text": "x"}).json()
-    assert flat["location"] == {"type": "place", "name": "home"}  # fits the phone's current union
+    assert flat["location"] == {"type": "saved_place", "name": "home"}
     stored = client.post("/sessions/parse", json={"text": "x"}).json()["reminders"][0]
-    assert stored["location"]["type"] == "saved_place"  # the backend keeps the real meaning
+    assert stored["location"]["type"] == "saved_place"
 
 
 def run_live(cases):

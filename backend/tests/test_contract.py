@@ -83,6 +83,5 @@ def test_parse_response_matches_ParsedReminder(client, monkeypatch):
     assert body["location"]["type"] in location_type_values()
 
 
-@pytest.mark.xfail(reason="mobile ReminderLocation.type lacks 'saved_place' (needed for 'when I get home')")
 def test_phone_type_knows_saved_place():
     assert "saved_place" in location_type_values()
