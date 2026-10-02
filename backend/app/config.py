@@ -43,3 +43,8 @@ LLM_CALLS_PER_MINUTE = int(os.getenv("LLM_CALLS_PER_MINUTE", "60"))
 # many seconds with no chunks, or at the hard maximum. Checked lazily on read.
 SESSION_SILENCE_TIMEOUT_S = int(os.getenv("SESSION_SILENCE_TIMEOUT_S", "120"))
 SESSION_MAX_DURATION_S = int(os.getenv("SESSION_MAX_DURATION_S", "1800"))
+
+
+# Time logic (Module 06).
+APPROACHING_WINDOW_MIN = int(os.getenv("APPROACHING_WINDOW_MIN", "120"))  # matches the "+30, deadline < 2h" scoring rule
+OVERDUE_WINDOW_HOURS = int(os.getenv("OVERDUE_WINDOW_HOURS", "24"))  # past this, a missed reminder is expired
