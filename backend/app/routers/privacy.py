@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlmodel import Session, select
+from sqlalchemy import delete, update
+from sqlmodel import Session, func, select
 
 from app import config
 from app.db import get_session
@@ -18,7 +19,7 @@ router = APIRouter(tags=["privacy"], dependencies=[Depends(require_api_key)])
 
 
 def _count(db: Session, model, *where) -> int:
-    return len(db.exec(select(model.id if hasattr(model, "id") else model.name).where(*where)).all())
+    return db.exec(select(func.count()).select_from(model).where(*where)).one()
 
 
 @router.get("/privacy", response_model=PrivacyInfo)
@@ -51,27 +52,24 @@ def delete_session_transcript(session_id: str, db: Session = Depends(get_session
     """Erase the words a session's reminders and drafts were parsed from, and any
     queued chunks. The reminders and drafts themselves stay."""
     _session_or_404(db, session_id)
-    erased = 0
-    for model in (ReminderRow, ActionRow):
-        for row in db.exec(select(model).where(model.session_id == session_id, model.source_text.is_not(None))):
-            row.source_text = None
-            db.add(row)
-            erased += 1
-    pending = db.exec(select(PendingChunkRow).where(PendingChunkRow.session_id == session_id)).all()
-    for chunk in pending:
-        db.delete(chunk)
+    erased = sum(
+        db.execute(
+            update(m).where(m.session_id == session_id, m.source_text.is_not(None)).values(source_text=None)
+        ).rowcount
+        for m in (ReminderRow, ActionRow)
+    )
+    pending = db.execute(delete(PendingChunkRow).where(PendingChunkRow.session_id == session_id)).rowcount
     db.commit()
-    return {"transcriptsErased": erased, "pendingChunksDeleted": len(pending)}
+    return {"transcriptsErased": erased, "pendingChunksDeleted": pending}
 
 
 @router.delete("/sessions/{session_id}", status_code=204)
 def delete_session(session_id: str, db: Session = Depends(get_session)):
     """Delete a session and everything it produced."""
-    row = _session_or_404(db, session_id)
+    _session_or_404(db, session_id)
     for model in (ReminderRow, ActionRow, PendingChunkRow):
-        for item in db.exec(select(model).where(model.session_id == session_id)):
-            db.delete(item)
-    db.delete(row)
+        db.execute(delete(model).where(model.session_id == session_id))
+    db.execute(delete(SessionRow).where(SessionRow.id == session_id))
     db.commit()
     return Response(status_code=204)
 
@@ -91,9 +89,6 @@ def delete_history(
     if saved_places:
         models.append(("savedPlaces", SavedPlaceRow))
     for label, model in models:
-        rows = db.exec(select(model)).all()
-        for r in rows:
-            db.delete(r)
-        counts[label] = len(rows)
+        counts[label] = db.execute(delete(model)).rowcount
     db.commit()
     return {"deleted": counts}

@@ -4,6 +4,7 @@ Points (from the execution plan):
   +50  the reminder's place is where the person is now
   +30  the deadline is within 2 hours (or just passed)
   +15  a relevant place AND the deadline is today
+       (a time_and_location reminder needs both: its place counts from the deadline day on)
   +10  never notified before
   -40  notified within the cooldown
   -100 completed, or snoozed
@@ -37,12 +38,23 @@ def score_reminder(reminder: Reminder, now: datetime, location_matched: bool, tz
     status = timelogic.deadline_status(reminder, now)
     proximity = timelogic.window_status(reminder, now)  # deadline facts, even if snoozed or done
 
-    if location_matched:
+    relevant = location_matched
+    if (
+        relevant
+        and reminder.trigger_type == "time_and_location"
+        and reminder.deadline is not None
+        and reminder.deadline.astimezone(tz).date() > now.astimezone(tz).date()
+    ):
+        # Both were asked for ("at the pharmacy on Friday"), so the place only counts
+        # once the deadline day has arrived. A location-only reminder has no such wait.
+        relevant = False
+        s.add("place matches but the deadline is on a later day", 0)
+    if relevant:
         s.add("relevant place is nearby", 50)
     if proximity in ("approaching", "due"):
         s.add("deadline within 2 hours or just passed", 30)
     if (
-        location_matched
+        relevant
         and reminder.deadline is not None
         and reminder.deadline.astimezone(tz).date() == now.astimezone(tz).date()
     ):

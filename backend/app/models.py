@@ -112,6 +112,10 @@ class Reminder(ReminderBase):
     last_notified_at: datetime | None = None
     snoozed_until: datetime | None = None
 
+    # The phone can send an unsynced reminder inline (POST /evaluate-reminder), so
+    # these need the same offset check as ReminderCreate or time maths crashes later.
+    _tz = field_validator("created_at", "last_notified_at", "snoozed_until")(lambda cls, v: require_tz(v))
+
 
 class ReminderUpdate(ApiModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
@@ -380,8 +384,8 @@ class EmailRequest(ApiModel):
 
 
 class EmailUpdate(ApiModel):
-    to: str | None = None
-    to_name: str | None = None
+    to: str | None = Field(default=None, max_length=320)
+    to_name: str | None = Field(default=None, max_length=200)
     subject: str | None = Field(default=None, min_length=1, max_length=300)
     body: str | None = Field(default=None, min_length=1, max_length=10000)
 
@@ -412,6 +416,8 @@ class PendingChunkRow(SQLModel, table=True):
     captured_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
     timezone: str | None = None
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    # Set while one caller is parsing this chunk, so two callers can't both process it.
+    claimed_at: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
 
 
 class PrivacyCounts(ApiModel):

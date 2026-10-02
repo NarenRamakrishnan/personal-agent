@@ -7,9 +7,9 @@ keeps the backend stateless between requests and easy to restart.
 
 from datetime import datetime, timedelta
 
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
-from app import config
+from app import config, retention
 from app.models import (
     ActionRow,
     PendingChunkRow,
@@ -60,6 +60,7 @@ def start(db: Session, session_id: str) -> SessionRow:
         db.add(row)
         db.commit()
         db.refresh(row)
+        retention.maybe_purge(db)  # hourly at most; a long-running server never restarts
     return refresh(db, row)
 
 
@@ -116,13 +117,13 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
     actions = db.exec(
         select(ActionRow).where(ActionRow.session_id == row.id).order_by(ActionRow.created_at, ActionRow.id)
     )
-    pending = db.exec(select(PendingChunkRow.id).where(PendingChunkRow.session_id == row.id)).all()
+    pending = db.exec(select(func.count()).select_from(PendingChunkRow).where(PendingChunkRow.session_id == row.id)).one()
     info = SessionInfo.model_validate(row.model_dump())
     return SessionDetail(
         **info.model_dump(),
         reminders=[r.to_api() for r in reminders],
         actions=[a.to_api() for a in actions],
-        pending_chunks=len(pending),
+        pending_chunks=pending,
     )
 
 

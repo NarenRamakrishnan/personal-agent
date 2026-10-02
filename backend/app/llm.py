@@ -53,6 +53,10 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
         usage.reserve_call()
     except usage.BudgetExceeded as e:
         raise BudgetError(str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        # Can't count the spend, so don't spend. Fail closed, but as an LLMError so
+        # the caller's fallback (queue, or keep the typed text) still runs.
+        raise LLMError(f"spend guard unavailable: {type(e).__name__}") from e
     try:
         response = get_client().chat.completions.create(
             model=model or config.NEBIUS_MODEL,

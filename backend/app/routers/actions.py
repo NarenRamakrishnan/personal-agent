@@ -68,6 +68,9 @@ def edit_draft(action_id: str, body: EmailUpdate, db: Session = Depends(get_sess
     for key in ("subject", "body"):
         if changes.get(key, "keep") is None:
             changes.pop(key)
+    changes = {k: v for k, v in changes.items() if getattr(row, k) != v}
+    if not changes:
+        return row.to_api()  # nothing changed, so an existing approval still holds
     for key, value in changes.items():
         setattr(row, key, value)
     row.status, row.approved_at = "needs_approval", None

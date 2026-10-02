@@ -24,6 +24,9 @@ The "email" object has:
 """
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Whole addresses as they appear in speech, so a fragment of one (smith@... from
+# john.smith@...) is a different mailbox and does not count as spoken.
+SPOKEN_ADDRESS_RE = re.compile(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+")
 
 
 class NoEmailRequest(Exception):
@@ -67,15 +70,17 @@ def _clean_body(value, limit: int = 10000) -> str | None:
 
 
 def _spoken_address(candidate, source_text: str) -> str | None:
-    """Keep an address only if it is well formed AND appears in what was said.
+    """Keep an address only if it is well formed AND is, in full, one the person said.
 
     This stops a model (or words injected into ambient speech) from supplying a
-    recipient the person never named.
+    recipient the person never named, and from trimming a spoken address into a
+    different real mailbox.
     """
     c = _clean(candidate, 320)
-    if c and EMAIL_RE.match(c) and c.lower() in source_text.lower():
-        return c
-    return None
+    if not c or not EMAIL_RE.match(c):
+        return None
+    spoken = {m.group(0).lower() for m in SPOKEN_ADDRESS_RE.finditer(source_text)}
+    return c if c.lower() in spoken else None
 
 
 def draft_from_model(data: dict, source_text: str) -> EmailDraft:

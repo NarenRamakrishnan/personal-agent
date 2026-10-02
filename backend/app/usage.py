@@ -3,6 +3,10 @@
 Nebius Token Factory has no budget cap, so the backend enforces its own: a daily
 call limit, a daily token limit and a per-minute throttle. When a limit is hit
 the call is refused before it reaches Nebius, so nothing more is spent.
+
+The daily counters are updated with a single conditional UPDATE, so several
+workers sharing one database can't both slip under the limit. The per-minute
+throttle is per process (a worker can't see another's recent calls).
 """
 
 import threading
@@ -11,6 +15,8 @@ import weakref
 from collections import deque
 from datetime import datetime, timezone
 
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app import config, db
@@ -23,7 +29,8 @@ class BudgetExceeded(Exception):
 
 _recent: deque[float] = deque()
 _lock = threading.Lock()
-_ready: "weakref.WeakSet" = weakref.WeakSet()  # engines whose tables exist; weak so a freed engine's id can't be mistaken for a new one
+# Engines whose tables exist. Weak, so a freed engine's id can't be mistaken for a new one.
+_ready: "weakref.WeakSet" = weakref.WeakSet()
 
 
 def _engine(eng):
@@ -36,6 +43,15 @@ def _engine(eng):
 
 def today() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _ensure_row(s: Session, day: str) -> None:
+    if s.get(LlmUsageRow, day) is None:
+        try:
+            s.add(LlmUsageRow(day=day))
+            s.commit()
+        except IntegrityError:  # another worker created today's row first
+            s.rollback()
 
 
 def snapshot(eng=None) -> dict:
@@ -52,6 +68,27 @@ def snapshot(eng=None) -> dict:
     }
 
 
+def _reserve_in_db(eng) -> None:
+    """Count this call only if both daily limits still have room, in one statement."""
+    day = today()
+    with Session(_engine(eng)) as s:
+        _ensure_row(s, day)
+        room = []
+        if config.LLM_DAILY_CALL_LIMIT:
+            room.append(LlmUsageRow.calls < config.LLM_DAILY_CALL_LIMIT)
+        if config.LLM_DAILY_TOKEN_LIMIT:
+            room.append(LlmUsageRow.tokens < config.LLM_DAILY_TOKEN_LIMIT)
+        result = s.execute(
+            update(LlmUsageRow).where(LlmUsageRow.day == day, *room).values(calls=LlmUsageRow.calls + 1)
+        )
+        s.commit()
+        if result.rowcount == 0:
+            row = s.get(LlmUsageRow, day)
+            if config.LLM_DAILY_CALL_LIMIT and row.calls >= config.LLM_DAILY_CALL_LIMIT:
+                raise BudgetExceeded("daily model call limit reached")
+            raise BudgetExceeded("daily model token limit reached")
+
+
 def reserve_call(eng=None) -> None:
     """Check every limit, then count this call. Raises BudgetExceeded to refuse it."""
     with _lock:
@@ -62,15 +99,7 @@ def reserve_call(eng=None) -> None:
                 _recent.popleft()
             if len(_recent) >= per_minute:
                 raise BudgetExceeded("too many model calls this minute")
-        with Session(_engine(eng)) as s:
-            row = s.get(LlmUsageRow, today()) or LlmUsageRow(day=today())
-            if config.LLM_DAILY_CALL_LIMIT and row.calls >= config.LLM_DAILY_CALL_LIMIT:
-                raise BudgetExceeded("daily model call limit reached")
-            if config.LLM_DAILY_TOKEN_LIMIT and row.tokens >= config.LLM_DAILY_TOKEN_LIMIT:
-                raise BudgetExceeded("daily model token limit reached")
-            row.calls += 1
-            s.add(row)
-            s.commit()
+        _reserve_in_db(eng)
         _recent.append(time.monotonic())
 
 
@@ -78,9 +107,9 @@ def record_tokens(tokens: int, eng=None) -> None:
     if tokens <= 0:
         return
     with _lock, Session(_engine(eng)) as s:
-        row = s.get(LlmUsageRow, today()) or LlmUsageRow(day=today())
-        row.tokens += tokens
-        s.add(row)
+        day = today()
+        _ensure_row(s, day)
+        s.execute(update(LlmUsageRow).where(LlmUsageRow.day == day).values(tokens=LlmUsageRow.tokens + tokens))
         s.commit()
 
 

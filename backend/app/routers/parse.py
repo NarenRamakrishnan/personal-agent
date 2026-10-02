@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -55,7 +56,9 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
         raise HTTPException(
             status_code=409, detail=f"Session already ended ({e}). Start a new session."
         )
-    now = body.now or body.captured_at or utcnow()
+    # Relative words ("tonight") resolve against when the speech happened, which for a
+    # buffered chunk is captured_at and not the later moment it was sent.
+    now = body.captured_at or body.now or utcnow()
     try:
         rows = chunks.ingest(db, session_id, body.text, now, body.timezone)
     except llm.LLMError:
@@ -65,5 +68,11 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
         response.status_code = 202
         return ParseResponse(session_id=session_id, reminders=[], pending_chunks=chunks.pending_count(db, session_id))
     saved = [r.to_api() for r in rows]  # before the retry's commit expires these row objects
-    remaining = chunks.retry_pending(db, session_id, limit=2) if chunks.pending_count(db, session_id) else 0
+    remaining = chunks.pending_count(db, session_id)
+    if remaining:
+        try:  # best effort: this chunk is already saved, so a failure here must not become a 500
+            remaining = chunks.retry_pending(db, session_id, limit=2)
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).warning("backlog retry skipped: %s", type(e).__name__)
+            db.rollback()
     return ParseResponse(session_id=session_id, reminders=saved, pending_chunks=remaining)
