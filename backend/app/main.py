@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
 from app.db import init_db
-from app.routers import parse, reminders, sessions, usage
+from app.routers import evaluate, parse, reminders, sessions, usage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -30,6 +30,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 app.include_router(reminders.router)
 app.include_router(parse.router)
+app.include_router(evaluate.router)
 app.include_router(sessions.router)
 app.include_router(usage.router)
 

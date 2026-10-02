@@ -247,3 +247,67 @@ class SessionInfo(ApiModel):
 class SessionDetail(SessionInfo):
     # The end-of-session review list.
     reminders: list[Reminder]
+
+
+class SavedPlaceRow(SQLModel, table=True):
+    """A place the person names ("home", "work", "school") with where it is."""
+
+    __tablename__ = "saved_places"
+
+    name: str = Field(primary_key=True)  # lower-case, alias-folded
+    latitude: float
+    longitude: float
+    radius_meters: float = 150.0
+
+
+class SavedPlace(ApiModel):
+    name: str
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    radius_meters: float = Field(default=150.0, gt=0, le=5000)
+
+
+class NearbyPlace(ApiModel):
+    name: str | None = None
+    types: list[str] = Field(default_factory=list, max_length=50)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # If the phone already knows how far it is, send it. If neither this nor
+    # coordinates are sent, the place is assumed to be nearby (the phone's
+    # nearby search is already radius-bound).
+    distance_meters: float | None = Field(default=None, ge=0)
+
+
+class EvalContext(ApiModel):
+    now: datetime | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    nearby_places: list[NearbyPlace] = Field(default_factory=list, max_length=100)
+
+    _tz = field_validator("now")(lambda cls, v: require_tz(v))
+
+
+class EvaluateRequest(ApiModel):
+    reminder_id: str | None = None
+    reminder: Reminder | None = None  # for reminders the phone has not synced yet
+    context: EvalContext = Field(default_factory=EvalContext)
+
+    @model_validator(mode="after")
+    def need_one(self):
+        if (self.reminder_id is None) == (self.reminder is None):
+            raise ValueError("send exactly one of reminderId or reminder")
+        return self
+
+
+class LocationSignal(ApiModel):
+    applicable: bool
+    matched: bool = False
+    reason: str
+    distance_meters: float | None = None
+
+
+class EvaluateResponse(ApiModel):
+    reminder_id: str
+    time_status: str
+    should_time_notify: bool
+    location: LocationSignal
