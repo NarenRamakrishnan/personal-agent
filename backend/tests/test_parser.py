@@ -185,12 +185,12 @@ def test_empty_choices_becomes_llm_error(monkeypatch, choices):
         llm.chat_json([{"role": "user", "content": "x"}])
 
 
-def test_session_route_saves_nothing_and_503s_when_the_model_fails(client, monkeypatch):
+def test_session_route_queues_the_chunk_when_the_model_fails(client, monkeypatch):
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "chat_json", lambda *a, **k: (_ for _ in ()).throw(llm.LLMError("x")))
     r = client.post("/sessions/parse", json={"text": "just chatting about lunch"})
-    assert r.status_code == 503
-    assert client.get("/reminders").json() == []
+    assert r.status_code == 202 and r.json()["pendingChunks"] == 1 and r.json()["reminders"] == []
+    assert client.get("/reminders").json() == []  # nothing invented from chatter
     # typed input still keeps what the person typed
     typed = client.post("/parse", json={"text": "call the bank"})
     assert typed.status_code == 200 and typed.json()["title"] == "call the bank"

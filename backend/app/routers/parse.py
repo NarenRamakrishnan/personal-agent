@@ -1,9 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session
 
-from app import llm, parser, sessions
+from app import chunks, llm, parser, sessions
 from app.db import get_session
 from app.models import (
     ParsedReminder,
@@ -13,7 +13,6 @@ from app.models import (
     ReminderCreate,
     utcnow,
 )
-from app.routers.reminders import row_from_create
 from app.security import require_api_key
 
 router = APIRouter(tags=["parse"], dependencies=[Depends(require_api_key)])
@@ -42,30 +41,29 @@ def parse_text(body: ParseRequest):
 
 
 @router.post("/sessions/parse", response_model=ParseResponse, response_model_exclude_none=True)
-def parse_into_session(body: ParseRequest, db: Session = Depends(get_session)):
+def parse_into_session(body: ParseRequest, response: Response, db: Session = Depends(get_session)):
     """Always-listening input: parse every commitment in the text and save them
-    under a session, ready for the end-of-session review list."""
+    under a session, ready for the end-of-session review list.
+
+    If the model can't be reached the chunk is kept and retried (202), so a
+    network or model failure does not lose what the person said.
+    """
     session_id = body.session_id or str(uuid.uuid4())
     try:
-        sessions.touch(db, session_id)
+        sessions.accept_chunk(db, session_id, body.captured_at)
     except sessions.SessionEnded as e:
         raise HTTPException(
             status_code=409, detail=f"Session already ended ({e}). Start a new session."
         )
+    now = body.now or body.captured_at or utcnow()
     try:
-        candidates = parser.parse(
-            body.text, body.now or utcnow(), session_id, body.timezone, fallback=False
-        )
+        rows = chunks.ingest(db, session_id, body.text, now, body.timezone)
     except llm.LLMError:
-        # Nothing is saved. The app keeps the chunk and retries instead of the
-        # session filling with a junk reminder per failed chunk.
-        raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
-    for c in candidates:
-        c.session_id = session_id  # never trust the parser to have set it
-    candidates = sessions.drop_duplicates(db, session_id, candidates)
-    rows = [row_from_create(c) for c in candidates]
-    db.add_all(rows)
-    db.commit()
-    for row in rows:
-        db.refresh(row)
-    return ParseResponse(session_id=session_id, reminders=[r.to_api() for r in rows])
+        if not chunks.queue(db, session_id, body.text, now, body.timezone):
+            # Transcripts may not be stored, so there is nowhere safe to keep it.
+            raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
+        response.status_code = 202
+        return ParseResponse(session_id=session_id, reminders=[], pending_chunks=chunks.pending_count(db, session_id))
+    saved = [r.to_api() for r in rows]  # before the retry's commit expires these row objects
+    remaining = chunks.retry_pending(db, session_id, limit=2) if chunks.pending_count(db, session_id) else 0
+    return ParseResponse(session_id=session_id, reminders=saved, pending_chunks=remaining)

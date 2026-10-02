@@ -10,7 +10,15 @@ from datetime import datetime, timedelta
 from sqlmodel import Session, select
 
 from app import config
-from app.models import ActionRow, ReminderRow, SessionDetail, SessionInfo, SessionRow, utcnow
+from app.models import (
+    ActionRow,
+    PendingChunkRow,
+    ReminderRow,
+    SessionDetail,
+    SessionInfo,
+    SessionRow,
+    utcnow,
+)
 
 
 class SessionEnded(Exception):
@@ -67,6 +75,28 @@ def touch(db: Session, session_id: str) -> SessionRow:
     return row
 
 
+def accept_chunk(db: Session, session_id: str, captured_at: datetime | None = None) -> SessionRow:
+    """Register a chunk, or accept a late one that was spoken while the session was live.
+
+    A phone that lost signal sends its buffered chunks later. If the chunk says
+    when it was captured and that falls inside the session, it still belongs to
+    it, even though the session has since ended. That path does not extend the
+    session or change its state.
+    """
+    try:
+        return touch(db, session_id)
+    except SessionEnded:
+        row = db.get(SessionRow, session_id)
+        slack = timedelta(seconds=config.LATE_CHUNK_TOLERANCE_S)
+        if (
+            captured_at is not None
+            and row.ended_at is not None
+            and row.started_at - slack <= captured_at <= row.ended_at + slack
+        ):
+            return row
+        raise
+
+
 def end(db: Session, row: SessionRow) -> SessionRow:
     row = refresh(db, row)
     if row.status == "listening":
@@ -86,9 +116,13 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
     actions = db.exec(
         select(ActionRow).where(ActionRow.session_id == row.id).order_by(ActionRow.created_at, ActionRow.id)
     )
+    pending = db.exec(select(PendingChunkRow.id).where(PendingChunkRow.session_id == row.id)).all()
     info = SessionInfo.model_validate(row.model_dump())
     return SessionDetail(
-        **info.model_dump(), reminders=[r.to_api() for r in reminders], actions=[a.to_api() for a in actions]
+        **info.model_dump(),
+        reminders=[r.to_api() for r in reminders],
+        actions=[a.to_api() for a in actions],
+        pending_chunks=len(pending),
     )
 
 

@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Reminder, ReminderCreate, ReminderRow, ReminderUpdate
+from app.models import Reminder, ReminderCreate, ReminderRow, ReminderUpdate, row_from_create
 from app.security import require_api_key
 
 log = logging.getLogger(__name__)
@@ -18,17 +18,6 @@ def get_or_404(db: Session, reminder_id: str) -> ReminderRow:
     row = db.get(ReminderRow, reminder_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Reminder not found")
-    return row
-
-
-def row_from_create(body: ReminderCreate) -> ReminderRow:
-    data = body.model_dump(exclude={"id", "created_at"})
-    data["location"] = body.location.model_dump(exclude_none=True) if body.location else None
-    row = ReminderRow(**data)
-    if body.id:
-        row.id = body.id
-    if body.created_at:
-        row.created_at = body.created_at
     return row
 
 

@@ -55,3 +55,11 @@ OVERDUE_WINDOW_HOURS = int(os.getenv("OVERDUE_WINDOW_HOURS", "24"))  # past this
 # cooldown (50+30+15-40 = 55) stays quiet.
 NOTIFY_THRESHOLD = int(os.getenv("NOTIFY_THRESHOLD", "60"))
 NOTIFY_COOLDOWN_MIN = int(os.getenv("NOTIFY_COOLDOWN_MIN", "30"))
+
+
+# Privacy and reliability (Module 10).
+# The backend never receives or stores audio, only text. These control the text.
+STORE_TRANSCRIPTS = os.getenv("STORE_TRANSCRIPTS", "true").lower() not in ("0", "false", "no")
+TRANSCRIPT_RETENTION_DAYS = int(os.getenv("TRANSCRIPT_RETENTION_DAYS", "30"))  # 0 keeps them until deleted
+PENDING_RETRY_LIMIT = int(os.getenv("PENDING_RETRY_LIMIT", "10"))
+LATE_CHUNK_TOLERANCE_S = int(os.getenv("LATE_CHUNK_TOLERANCE_S", "5"))

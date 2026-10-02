@@ -85,13 +85,13 @@ def test_a_missing_usage_block_does_not_lose_the_reply(monkeypatch):
     assert llm.chat_json([{"role": "user", "content": "x"}]) == {"reminders": []}
 
 
-def test_sessions_parse_503s_and_typed_parse_falls_back_when_over_budget(client, monkeypatch):
+def test_sessions_parse_queues_and_typed_parse_falls_back_when_over_budget(client, monkeypatch):
     limits(monkeypatch, calls=1)
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "get_client", lambda: fake_client())
     usage.reserve_call()  # today's budget is already spent
     monkeypatch.setattr(llm, "get_client", lambda: fake_client(boom=True))
-    assert client.post("/sessions/parse", json={"text": "chatter"}).status_code == 503
+    assert client.post("/sessions/parse", json={"text": "chatter"}).status_code == 202
     assert client.get("/reminders").json() == []
     typed = client.post("/parse", json={"text": "call the bank"})
     assert typed.status_code == 200 and typed.json()["title"] == "call the bank"

@@ -121,12 +121,12 @@ def test_same_commitment_in_a_different_session_is_kept(client, clock):
     assert len(a["reminders"]) == 1 and len(b["reminders"]) == 1
 
 
-def test_a_failed_chunk_still_counts_as_activity_but_saves_nothing(client, clock, monkeypatch):
+def test_a_failed_chunk_still_counts_as_activity_and_is_queued_not_saved(client, clock, monkeypatch):
     sid = client.post("/sessions").json()["id"]
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "chat_json", lambda *a, **k: (_ for _ in ()).throw(llm.LLMError("x")))
     clock.now = T0 + timedelta(seconds=100)
-    assert chunk(client, sid, "chatter").status_code == 503
+    assert chunk(client, sid, "chatter").status_code == 202
     clock.now = T0 + timedelta(seconds=200)  # 100s after the failed chunk, 200s after start
     assert client.get(f"/sessions/{sid}").json()["status"] == "listening"
     assert client.get(f"/sessions/{sid}").json()["reminders"] == []

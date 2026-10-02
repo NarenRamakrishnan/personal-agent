@@ -54,19 +54,25 @@ class UTCDateTime(TypeDecorator):
 class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
+    @field_validator("*", mode="after")
+    @classmethod
+    def _strip_nul(cls, v):
+        # Postgres text columns reject NUL; SQLite would store it. Drop it at the door.
+        return v.replace("\x00", "") if isinstance(v, str) else v
+
 
 class Location(ApiModel):
     type: LocationType
-    name: str | None = None
-    category: str | None = None
+    name: str | None = Field(default=None, max_length=200)
+    category: str | None = Field(default=None, max_length=100)
     latitude: float | None = None
     longitude: float | None = None
     radius_meters: float | None = None
 
 
 class ReminderBase(ApiModel):
-    title: str = Field(min_length=1)
-    description: str | None = None
+    title: str = Field(min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=5000)
     deadline: datetime | None = None
     trigger_type: TriggerType
     location: Location | None = None
@@ -74,7 +80,7 @@ class ReminderBase(ApiModel):
     # review list is just GET /reminders?sessionId=... (Module 05).
     session_id: str | None = None
     # The words the reminder was parsed from, shown in the review list.
-    source_text: str | None = None
+    source_text: str | None = Field(default=None, max_length=5000)
 
     @model_validator(mode="after")
     def check_trigger(self):
@@ -108,8 +114,8 @@ class Reminder(ReminderBase):
 
 
 class ReminderUpdate(ApiModel):
-    title: str | None = Field(default=None, min_length=1)
-    description: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=5000)
     deadline: datetime | None = None
     trigger_type: TriggerType | None = None
     location: Location | None = None
@@ -182,18 +188,23 @@ class ParseRequest(ApiModel):
     # against the person's day and not the server's.
     now: datetime | None = None
     timezone: str | None = Field(default=None, max_length=64)
+    # When this speech was actually captured. A phone that lost signal sends its
+    # buffered chunks later; this lets them still count for the session they came from.
+    captured_at: datetime | None = None
 
-    @field_validator("now")
+    @field_validator("now", "captured_at")
     @classmethod
-    def now_needs_offset(cls, v):
+    def needs_offset(cls, v):
         if v is not None and v.tzinfo is None:
-            raise ValueError("now must include a timezone offset")
+            raise ValueError("timestamps must include a timezone offset")
         return v
 
 
 class ParseResponse(ApiModel):
     session_id: str
     reminders: list[Reminder]
+    # Chunks the model could not parse yet. They are kept and retried, not lost.
+    pending_chunks: int = 0
 
 
 class ParsedReminder(ApiModel):
@@ -254,6 +265,7 @@ class SessionDetail(SessionInfo):
     # still need a manual approval.
     reminders: list[Reminder]
     actions: list[Action] = Field(default_factory=list)
+    pending_chunks: int = 0
 
 
 class SavedPlaceRow(SQLModel, table=True):
@@ -372,3 +384,47 @@ class EmailUpdate(ApiModel):
     to_name: str | None = None
     subject: str | None = Field(default=None, min_length=1, max_length=300)
     body: str | None = Field(default=None, min_length=1, max_length=10000)
+
+
+def row_from_create(body: "ReminderCreate") -> "ReminderRow":
+    from app import config  # local import: config has no model deps, this keeps import order simple
+
+    data = body.model_dump(exclude={"id", "created_at"})
+    data["location"] = body.location.model_dump(exclude_none=True) if body.location else None
+    if not config.STORE_TRANSCRIPTS:
+        data["source_text"] = None
+    row = ReminderRow(**data)
+    if body.id:
+        row.id = body.id
+    if body.created_at:
+        row.created_at = body.created_at
+    return row
+
+
+class PendingChunkRow(SQLModel, table=True):
+    """A chunk of speech the model could not parse yet. Kept so it is not lost."""
+
+    __tablename__ = "pending_chunks"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    session_id: str = Field(index=True)
+    text: str
+    captured_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    timezone: str | None = None
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+
+
+class PrivacyCounts(ApiModel):
+    sessions: int
+    reminders: int
+    reminders_with_transcript: int
+    actions: int
+    pending_chunks: int
+    saved_places: int
+
+
+class PrivacyInfo(ApiModel):
+    audio_stored: bool
+    store_transcripts: bool
+    transcript_retention_days: int
+    counts: PrivacyCounts
