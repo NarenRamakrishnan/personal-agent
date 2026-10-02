@@ -217,3 +217,33 @@ class LlmUsageRow(SQLModel, table=True):
     day: str = Field(primary_key=True)  # YYYY-MM-DD, UTC
     calls: int = 0
     tokens: int = 0
+
+
+class SessionRow(SQLModel, table=True):
+    """One continuous listening session (Module 04)."""
+
+    __tablename__ = "sessions"
+
+    id: str = Field(primary_key=True)
+    status: str = "listening"  # listening | ended
+    started_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    last_activity_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    ended_at: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
+    end_reason: str | None = None  # user | silence_timeout | max_duration
+
+
+EndReason = Literal["user", "silence_timeout", "max_duration"]
+
+
+class SessionInfo(ApiModel):
+    id: str
+    status: Literal["listening", "ended"]
+    started_at: datetime
+    last_activity_at: datetime
+    ended_at: datetime | None = None
+    end_reason: EndReason | None = None
+
+
+class SessionDetail(SessionInfo):
+    # The end-of-session review list.
+    reminders: list[Reminder]

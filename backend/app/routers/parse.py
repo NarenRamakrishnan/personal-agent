@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from app import llm, parser
+from app import llm, parser, sessions
 from app.db import get_session
 from app.models import (
     Location,
@@ -57,6 +57,12 @@ def parse_into_session(body: ParseRequest, db: Session = Depends(get_session)):
     under a session, ready for the end-of-session review list."""
     session_id = body.session_id or str(uuid.uuid4())
     try:
+        sessions.touch(db, session_id)
+    except sessions.SessionEnded as e:
+        raise HTTPException(
+            status_code=409, detail=f"Session already ended ({e}). Start a new session."
+        )
+    try:
         candidates = parser.parse(
             body.text, body.now or utcnow(), session_id, body.timezone, fallback=False
         )
@@ -64,6 +70,9 @@ def parse_into_session(body: ParseRequest, db: Session = Depends(get_session)):
         # Nothing is saved. The app keeps the chunk and retries instead of the
         # session filling with a junk reminder per failed chunk.
         raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
+    for c in candidates:
+        c.session_id = session_id  # never trust the parser to have set it
+    candidates = sessions.drop_duplicates(db, session_id, candidates)
     rows = [row_from_create(c) for c in candidates]
     db.add_all(rows)
     db.commit()

@@ -37,3 +37,9 @@ API_KEY = os.getenv("API_KEY", "")
 LLM_DAILY_CALL_LIMIT = int(os.getenv("LLM_DAILY_CALL_LIMIT", "400"))
 LLM_DAILY_TOKEN_LIMIT = int(os.getenv("LLM_DAILY_TOKEN_LIMIT", "400000"))
 LLM_CALLS_PER_MINUTE = int(os.getenv("LLM_CALLS_PER_MINUTE", "60"))
+
+
+# Listening sessions (Module 04). A session ends when the app says so, after this
+# many seconds with no chunks, or at the hard maximum. Checked lazily on read.
+SESSION_SILENCE_TIMEOUT_S = int(os.getenv("SESSION_SILENCE_TIMEOUT_S", "120"))
+SESSION_MAX_DURATION_S = int(os.getenv("SESSION_MAX_DURATION_S", "1800"))

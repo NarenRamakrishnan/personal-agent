@@ -7,6 +7,7 @@ the call is refused before it reaches Nebius, so nothing more is spent.
 
 import threading
 import time
+import weakref
 from collections import deque
 from datetime import datetime, timezone
 
@@ -22,14 +23,14 @@ class BudgetExceeded(Exception):
 
 _recent: deque[float] = deque()
 _lock = threading.Lock()
-_ready: set[int] = set()
+_ready: "weakref.WeakSet" = weakref.WeakSet()  # engines whose tables exist; weak so a freed engine's id can't be mistaken for a new one
 
 
 def _engine(eng):
     eng = eng or db.engine
-    if id(eng) not in _ready:
+    if eng not in _ready:
         db.init_db(eng)
-        _ready.add(id(eng))
+        _ready.add(eng)
     return eng
 
 
