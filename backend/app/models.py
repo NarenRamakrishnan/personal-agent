@@ -148,7 +148,11 @@ ActionStatus = Literal["needs_approval", "approved", "cancelled"]
 
 
 class EmailDraft(ApiModel):
+    # `to` is an address and is only ever filled if the person actually said one.
+    # `to_name` is who they named ("Alex", "my professor"); the phone resolves it
+    # to an address through the contacts the person has granted.
     to: str | None = None
+    to_name: str | None = None
     subject: str
     body: str
 
@@ -161,6 +165,7 @@ class Action(ApiModel):
     source_text: str | None = None
     email: EmailDraft
     created_at: datetime
+    approved_at: datetime | None = None
 
 
 MAX_TEXT_CHARS = 5000
@@ -245,8 +250,10 @@ class SessionInfo(ApiModel):
 
 
 class SessionDetail(SessionInfo):
-    # The end-of-session review list.
+    # The end-of-session review list: saved reminders plus email drafts that
+    # still need a manual approval.
     reminders: list[Reminder]
+    actions: list[Action] = Field(default_factory=list)
 
 
 class SavedPlaceRow(SQLModel, table=True):
@@ -322,3 +329,46 @@ class EvaluateResponse(ApiModel):
     notify: bool
     decided_by: Literal["time", "context"] | None = None
     reasons: list[ScoreReason]
+
+
+class ActionRow(SQLModel, table=True):
+    __tablename__ = "actions"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    type: str = "email"
+    status: str = "needs_approval"
+    session_id: str | None = Field(default=None, index=True)
+    source_text: str | None = None
+    to: str | None = None
+    to_name: str | None = None
+    subject: str
+    body: str
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    approved_at: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
+
+    def to_api(self) -> "Action":
+        return Action(
+            id=self.id, type="email", status=self.status, session_id=self.session_id,
+            source_text=self.source_text, created_at=self.created_at, approved_at=self.approved_at,
+            email=EmailDraft(to=self.to, to_name=self.to_name, subject=self.subject, body=self.body),
+        )
+
+
+class EmailRequest(ApiModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, str_strip_whitespace=True
+    )
+
+    text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
+    session_id: str | None = None
+    now: datetime | None = None
+    timezone: str | None = Field(default=None, max_length=64)
+
+    _tz = field_validator("now")(lambda cls, v: require_tz(v))
+
+
+class EmailUpdate(ApiModel):
+    to: str | None = None
+    to_name: str | None = None
+    subject: str | None = Field(default=None, min_length=1, max_length=300)
+    body: str | None = Field(default=None, min_length=1, max_length=10000)

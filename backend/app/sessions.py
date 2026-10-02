@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from sqlmodel import Session, select
 
 from app import config
-from app.models import ReminderRow, SessionDetail, SessionInfo, SessionRow, utcnow
+from app.models import ActionRow, ReminderRow, SessionDetail, SessionInfo, SessionRow, utcnow
 
 
 class SessionEnded(Exception):
@@ -83,8 +83,13 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
         .where(ReminderRow.session_id == row.id)
         .order_by(ReminderRow.created_at, ReminderRow.id)
     )
+    actions = db.exec(
+        select(ActionRow).where(ActionRow.session_id == row.id).order_by(ActionRow.created_at, ActionRow.id)
+    )
     info = SessionInfo.model_validate(row.model_dump())
-    return SessionDetail(**info.model_dump(), reminders=[r.to_api() for r in reminders])
+    return SessionDetail(
+        **info.model_dump(), reminders=[r.to_api() for r in reminders], actions=[a.to_api() for a in actions]
+    )
 
 
 # Repeats of a relative time ("in 30 minutes" said twice) differ by seconds, so
