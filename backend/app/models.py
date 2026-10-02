@@ -283,6 +283,8 @@ class EvalContext(ApiModel):
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     nearby_places: list[NearbyPlace] = Field(default_factory=list, max_length=100)
+    # IANA name, so "deadline is today" means the person's today.
+    timezone: str | None = Field(default=None, max_length=64)
 
     _tz = field_validator("now")(lambda cls, v: require_tz(v))
 
@@ -306,8 +308,17 @@ class LocationSignal(ApiModel):
     distance_meters: float | None = None
 
 
+class ScoreReason(ApiModel):
+    label: str
+    points: int
+
+
 class EvaluateResponse(ApiModel):
     reminder_id: str
     time_status: str
     should_time_notify: bool
     location: LocationSignal
+    score: int
+    notify: bool
+    decided_by: Literal["time", "context"] | None = None
+    reasons: list[ScoreReason]

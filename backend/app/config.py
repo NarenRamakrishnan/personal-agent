@@ -48,3 +48,10 @@ SESSION_MAX_DURATION_S = int(os.getenv("SESSION_MAX_DURATION_S", "1800"))
 # Time logic (Module 06).
 APPROACHING_WINDOW_MIN = int(os.getenv("APPROACHING_WINDOW_MIN", "120"))  # matches the "+30, deadline < 2h" scoring rule
 OVERDUE_WINDOW_HOURS = int(os.getenv("OVERDUE_WINDOW_HOURS", "24"))  # past this, a missed reminder is expired
+
+
+# Scoring (Module 08). 60 is derived, not guessed: it is the lowest threshold where a
+# nearby never-notified reminder fires (50+10) while even the best case inside the
+# cooldown (50+30+15-40 = 55) stays quiet.
+NOTIFY_THRESHOLD = int(os.getenv("NOTIFY_THRESHOLD", "60"))
+NOTIFY_COOLDOWN_MIN = int(os.getenv("NOTIFY_COOLDOWN_MIN", "30"))

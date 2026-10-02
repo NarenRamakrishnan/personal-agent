@@ -27,22 +27,23 @@ from app.models import Reminder
 DeadlineStatus = Literal["completed", "snoozed", "none", "future", "approaching", "due", "expired"]
 
 
-def _effective_time(r: Reminder) -> datetime | None:
-    """When the reminder next 'counts': its deadline, or the end of a snooze that
-    has already finished (so a snoozed reminder comes back after the snooze)."""
+def _effective_time(r: Reminder, now: datetime) -> datetime | None:
+    """When the reminder counts: its deadline, or the end of a snooze that has
+    already finished (so a snoozed reminder comes back after the snooze)."""
     if r.deadline is None:
         return None
-    if r.snoozed_until is not None and r.snoozed_until > r.deadline:
+    if r.snoozed_until is not None and r.deadline < r.snoozed_until <= now:
         return r.snoozed_until
     return r.deadline
 
 
-def deadline_status(r: Reminder, now: datetime) -> DeadlineStatus:
-    if r.completed:
-        return "completed"
-    if r.snoozed_until is not None and r.snoozed_until > now:
-        return "snoozed"
-    when = _effective_time(r)
+def window_status(r: Reminder, now: datetime) -> DeadlineStatus:
+    """Where the deadline sits relative to now, ignoring completed and snoozed.
+
+    Scoring uses this directly so its breakdown can still say "deadline within
+    2 hours" for a reminder that is also snoozed or done.
+    """
+    when = _effective_time(r, now)
     if when is None:
         return "none"
     if when > now:
@@ -54,9 +55,17 @@ def deadline_status(r: Reminder, now: datetime) -> DeadlineStatus:
     return "expired"
 
 
+def deadline_status(r: Reminder, now: datetime) -> DeadlineStatus:
+    if r.completed:
+        return "completed"
+    if r.snoozed_until is not None and r.snoozed_until > now:
+        return "snoozed"
+    return window_status(r, now)
+
+
 def should_time_notify(r: Reminder, now: datetime) -> bool:
     if deadline_status(r, now) != "due":
         return False
-    when = _effective_time(r)
+    when = _effective_time(r, now)
     # Notify once per "counting" moment: a later notification already covers it.
     return r.last_notified_at is None or r.last_notified_at < when
