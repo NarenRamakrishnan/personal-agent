@@ -7,6 +7,7 @@ keeps the backend stateless between requests and easy to restart.
 
 from datetime import datetime, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 
 from app import config, retention
@@ -56,10 +57,14 @@ def start(db: Session, session_id: str) -> SessionRow:
     row = db.get(SessionRow, session_id)
     if row is None:
         now = _now()
-        row = SessionRow(id=session_id, started_at=now, last_activity_at=now)
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        db.add(SessionRow(id=session_id, started_at=now, last_activity_at=now))
+        try:
+            db.commit()
+        except IntegrityError:
+            # Another request started this same session a moment earlier: use theirs.
+            db.rollback()
+            return refresh(db, db.get(SessionRow, session_id))
+        row = db.get(SessionRow, session_id)
         retention.maybe_purge(db)  # hourly at most; a long-running server never restarts
     return refresh(db, row)
 

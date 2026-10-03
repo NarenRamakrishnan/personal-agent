@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import ValidationError
 
-from app import config, llm
+from app import config, llm, places
 from app.models import ReminderCreate
 
 log = logging.getLogger(__name__)
@@ -63,10 +63,16 @@ def resolve_tz(name: str | None) -> ZoneInfo:
 
 
 def calendar_lines(local: datetime, days: int = 15) -> str:
+    """Two weeks of dates with each day's UTC offset, so a deadline past a clock
+    change gets the right offset in the first place."""
     names = {0: " (today)", 1: " (tomorrow)"}
-    return "\n".join(
-        f"{(local + timedelta(days=i)):%a %Y-%m-%d}{names.get(i, '')}" for i in range(days)
-    )
+    lines = []
+    for i in range(days):
+        day = (local + timedelta(days=i)).date()
+        noon = datetime(day.year, day.month, day.day, 12, tzinfo=local.tzinfo)
+        offset = noon.strftime("%z")
+        lines.append(f"{day:%a %Y-%m-%d}{names.get(i, '')}, offset {offset[:3]}:{offset[3:]}")
+    return "\n".join(lines)
 
 
 def build_messages(text: str, now: datetime, tz: ZoneInfo) -> list[dict]:
@@ -78,6 +84,36 @@ def build_messages(text: str, now: datetime, tz: ZoneInfo) -> list[dict]:
         calendar=calendar_lines(local),
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": text}]
+
+
+def _canonical_place(loc: dict) -> dict:
+    """Make the model's place labels consistent. It sometimes calls a kind of place
+    a named place ("the shopping mall" as type place), which would then only match a
+    store literally named that. A known category word becomes the category, and
+    category labels are folded to our taxonomy ("supermarket" -> grocery_store)."""
+    kind = loc.get("type")
+    if kind == "category":
+        canon = places.canonical_category(loc.get("category") or loc.get("name"))
+        if canon:
+            return {"type": "category", "category": canon}
+    elif kind == "place":
+        canon = places.canonical_category(loc.get("name"))
+        if canon:
+            return {"type": "category", "category": canon}
+    return loc
+
+
+def _fix_clock_change(dt: datetime, tz: ZoneInfo) -> datetime:
+    """The model tends to copy today's UTC offset onto every date. Across a clock
+    change ("Monday at 9" when Sunday ends daylight saving) that shifts the time by
+    an hour. If the offset is one this zone uses but not the right one for that
+    date, the person meant the wall-clock time: re-read it in their zone."""
+    year = dt.year
+    zone_offsets = {tz.utcoffset(datetime(year, 1, 15)), tz.utcoffset(datetime(year, 7, 15))}
+    wall = dt.replace(tzinfo=None)
+    if dt.utcoffset() in zone_offsets and dt.utcoffset() != tz.utcoffset(wall):
+        return wall.replace(tzinfo=tz)
+    return dt
 
 
 # Only these model-supplied fields are trusted. id, createdAt, completed and the
@@ -93,11 +129,13 @@ def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> Remin
         # The model sometimes drops the offset. Read it in the person's timezone
         # rather than rejecting a reminder we could have saved.
         item["deadline"] = parsed if parsed.tzinfo else parsed.replace(tzinfo=tz)
+        item["deadline"] = _fix_clock_change(item["deadline"], tz)
     else:
         item["deadline"] = None
     location = item.get("location")
     if isinstance(location, dict):
         location = {k: v for k, v in location.items() if v is not None}
+        location = _canonical_place(location)
         item["location"] = location or None
     # Keep trigger type consistent with what is actually present.
     has_place, has_time = bool(item.get("location")), item["deadline"] is not None

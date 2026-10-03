@@ -65,9 +65,20 @@ def categories_match(wanted: str | None, raw_types: list[str]) -> bool:
     return False
 
 
+_FILLER = {"the", "a", "an", "and", "of", "at", "on", "in"}
+
+
+def _name_tokens(name: str | None) -> set[str]:
+    text = (name or "").lower().replace("'", "").replace("\u2019", "").replace("&", " and ")
+    return set(re.findall(r"[a-z0-9]+", text)) - _FILLER
+
+
 def names_match(wanted: str | None, actual: str | None) -> bool:
-    a, b = norm(wanted).replace("_", ""), norm(actual).replace("_", "")
-    return bool(a) and bool(b) and (a in b or b in a)
+    """Every word of the place the person named must appear in the nearby place's
+    name: "Target" matches "Target Hadley", and "Stop & Shop" matches "Stop and
+    Shop", but a place called "A" or "Tar" does not match "Target"."""
+    want, have = _name_tokens(wanted), _name_tokens(actual)
+    return bool(want) and want <= have
 
 
 def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
@@ -106,14 +117,18 @@ def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
         d = distance_m(ctx.latitude, ctx.longitude, loc.latitude, loc.longitude)
         return yes(f"within {radius:.0f} m of the target", d) if d <= radius else no(f"{d:.0f} m from the target", d)
 
-    # category / place: look through the places the phone says are nearby
+    # category / place: look through the places the phone says are nearby.
+    # A category can arrive in `name` (the phone's confirm screen rebuilds it that way).
+    wanted = (loc.category or loc.name) if loc.type == "category" else (loc.name or loc.category)
+    if not wanted:
+        return no(f"this {loc.type} reminder has no place to look for")
     radius = loc.radius_meters or DEFAULT_RADIUS_M
     if not ctx.nearby_places:
         return no("no nearby places provided")
     best = None
     for p in ctx.nearby_places:
         ok = (
-            categories_match(loc.category, p.types) if loc.type == "category" else names_match(loc.name, p.name)
+            categories_match(wanted, p.types) if loc.type == "category" else names_match(wanted, p.name)
         )
         if not ok:
             continue
@@ -126,7 +141,6 @@ def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
         if d is None or d <= radius:
             best = (p, d) if best is None or (d is not None and (best[1] is None or d < best[1])) else best
     if best:
-        label = best[0].name or loc.category or loc.name
+        label = best[0].name or wanted
         return yes(f"near {label}", best[1])
-    wanted = loc.category if loc.type == "category" else loc.name
-    return no(f"no nearby {wanted} within {radius:.0f} m")
+    return no(f"no nearby {wanted.replace('_', ' ')} within {radius:.0f} m")
