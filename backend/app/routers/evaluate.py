@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, select
 
-from app import places, scoring, timelogic
+from app import places, scoring, settings, timelogic
 from app.parser import resolve_tz
 from app.db import get_session
 from app.models import (
@@ -67,10 +67,10 @@ def evaluate_reminder(body: EvaluateRequest, db: Session = Depends(get_session))
         r = db.get(SavedPlaceRow, name)
         return (r.latitude, r.longitude, r.radius_meters) if r else None
 
-    signal = places.evaluate_location(reminder, body.context, lookup)
-    decision = scoring.decide(
-        reminder, now, signal["applicable"] and signal["matched"], resolve_tz(body.context.timezone)
-    )
+    prefs = settings.load(db)
+    tz = resolve_tz(settings.timezone_for(prefs, body.context.timezone))
+    signal = places.evaluate_location(reminder, body.context, lookup, prefs.radius_m)
+    decision = scoring.decide(reminder, now, signal["applicable"] and signal["matched"], tz, prefs)
     return EvaluateResponse(
         reminder_id=reminder.id,
         time_status=timelogic.deadline_status(reminder, now),

@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app import settings
 from app.db import get_session
 from app.models import Reminder, ReminderCreate, ReminderRow, ReminderUpdate, row_from_create
 from app.security import require_api_key
@@ -34,7 +35,7 @@ def create_reminder(body: ReminderCreate, response: Response, db: Session = Depe
                 response.status_code = 200
                 return existing.to_api()
             raise HTTPException(status_code=409, detail="A different reminder has this id")
-    row = row_from_create(body)
+    row = row_from_create(body, keep_text=settings.load(db).keep_transcripts)
     db.add(row)
     try:
         db.commit()

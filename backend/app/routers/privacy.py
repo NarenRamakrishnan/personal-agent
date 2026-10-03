@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import delete, update
 from sqlmodel import Session, func, select
 
-from app import config
+from app import settings
 from app.db import get_session
 from app.models import (
     ActionRow,
@@ -24,11 +24,13 @@ def _count(db: Session, model, *where) -> int:
 
 @router.get("/privacy", response_model=PrivacyInfo)
 def privacy_info(db: Session = Depends(get_session)):
-    """What this backend keeps. Facts from its config and database, nothing promised beyond that."""
+    """What this backend keeps. Facts from its config, the person's settings and the
+    database, nothing promised beyond that."""
+    prefs = settings.load(db)
     return PrivacyInfo(
         audio_stored=False,  # no endpoint accepts audio; only text reaches the backend
-        store_transcripts=config.STORE_TRANSCRIPTS,
-        transcript_retention_days=config.TRANSCRIPT_RETENTION_DAYS,
+        store_transcripts=prefs.keep_transcripts,
+        transcript_retention_days=prefs.retention_days,
         counts=PrivacyCounts(
             sessions=_count(db, SessionRow),
             reminders=_count(db, ReminderRow),

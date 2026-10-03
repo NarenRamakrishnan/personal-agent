@@ -81,7 +81,7 @@ def names_match(wanted: str | None, actual: str | None) -> bool:
     return bool(want) and want <= have
 
 
-def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
+def evaluate_location(reminder, ctx, saved_place_lookup, default_radius: float | None = None) -> dict:
     """Return {applicable, matched, reason, distance_meters} for one reminder.
 
     saved_place_lookup(name) -> (lat, lon, radius) or None.
@@ -113,7 +113,7 @@ def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
             return no("reminder coordinate is incomplete")
         if not have_fix:
             return no("current position unknown")
-        radius = loc.radius_meters or DEFAULT_RADIUS_M
+        radius = loc.radius_meters or default_radius or DEFAULT_RADIUS_M
         d = distance_m(ctx.latitude, ctx.longitude, loc.latitude, loc.longitude)
         return yes(f"within {radius:.0f} m of the target", d) if d <= radius else no(f"{d:.0f} m from the target", d)
 
@@ -122,7 +122,7 @@ def evaluate_location(reminder, ctx, saved_place_lookup) -> dict:
     wanted = (loc.category or loc.name) if loc.type == "category" else (loc.name or loc.category)
     if not wanted:
         return no(f"this {loc.type} reminder has no place to look for")
-    radius = loc.radius_meters or DEFAULT_RADIUS_M
+    radius = loc.radius_meters or default_radius or DEFAULT_RADIUS_M
     if not ctx.nearby_places:
         return no("no nearby places provided")
     best = None

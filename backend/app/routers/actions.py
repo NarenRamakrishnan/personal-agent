@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
-from app import config, emailer, llm
+from app import emailer, llm, settings
 from app.db import get_session
 from app.models import Action, ActionRow, EmailRequest, EmailUpdate, utcnow
 from app.parser import resolve_tz
@@ -22,13 +22,14 @@ def create_email_draft(body: EmailRequest, db: Session = Depends(get_session)):
     """Draft an email from speech. Always lands as needs_approval: nothing is
     ever sent by the backend, and the phone must get an explicit approval first."""
     try:
-        draft = emailer.make_draft(body.text, body.now or utcnow(), resolve_tz(body.timezone))
+        prefs = settings.load(db)
+        draft = emailer.make_draft(body.text, body.now or utcnow(), resolve_tz(settings.timezone_for(prefs, body.timezone)))
     except emailer.NoEmailRequest:
         raise HTTPException(status_code=422, detail="That doesn't look like a request to send an email")
     except llm.LLMError:
         raise HTTPException(status_code=503, detail="Drafting is temporarily unavailable")
     row = ActionRow(
-        session_id=body.session_id, source_text=body.text if config.STORE_TRANSCRIPTS else None,
+        session_id=body.session_id, source_text=body.text if prefs.keep_transcripts else None,
         to=draft.to, to_name=draft.to_name, subject=draft.subject, body=draft.body,
     )
     db.add(row)

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, update
 from sqlmodel import Session
 
-from app import config
+from app import settings
 from app.models import ActionRow, PendingChunkRow, ReminderRow, utcnow
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ _last_run: float | None = None
 
 
 def purge_expired(db: Session, now: datetime | None = None) -> dict:
-    days = config.TRANSCRIPT_RETENTION_DAYS
+    days = settings.load(db).retention_days  # the stricter of the server's and the person's
     if days <= 0:
         return {"transcripts_erased": 0, "pending_deleted": 0}
     cutoff = (now or utcnow()) - timedelta(days=days)

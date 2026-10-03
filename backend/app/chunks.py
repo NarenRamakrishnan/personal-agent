@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, or_, update
 from sqlmodel import Session, func, select
 
-from app import config, parser, sessions
+from app import config, parser, sessions, settings
 from app.models import PendingChunkRow, ReminderCreate, ReminderRow, row_from_create, utcnow
 
 log = logging.getLogger(__name__)
@@ -24,14 +24,15 @@ CLAIM_TTL = timedelta(minutes=2)  # a claim older than this is from a caller tha
 
 def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list[ReminderCreate]:
     """Parse and drop repeats. Writes nothing. Raises llm.LLMError if the model can't be used."""
-    candidates = parser.parse(text, now, session_id, tz_name, fallback=False)
+    candidates = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db).times)
     for c in candidates:
         c.session_id = session_id  # never trust the parser to have set it
     return sessions.drop_duplicates(db, session_id, candidates)
 
 
 def _save(db: Session, candidates: list[ReminderCreate], remove_chunk_id: str | None = None) -> list[ReminderRow]:
-    rows = [row_from_create(c) for c in candidates]
+    keep = settings.load(db).keep_transcripts
+    rows = [row_from_create(c, keep_text=keep) for c in candidates]
     db.add_all(rows)
     if remove_chunk_id:
         db.execute(delete(PendingChunkRow).where(PendingChunkRow.id == remove_chunk_id))
@@ -48,7 +49,7 @@ def ingest(db: Session, session_id: str, text: str, now: datetime, tz_name: str 
 
 def queue(db: Session, session_id: str, text: str, captured_at: datetime, tz_name: str | None) -> bool:
     """Keep an unparsed chunk. Returns False if transcripts are not allowed to be stored."""
-    if not config.STORE_TRANSCRIPTS:
+    if not settings.load(db).keep_transcripts:
         return False
     db.add(PendingChunkRow(session_id=session_id, text=text, captured_at=captured_at, timezone=tz_name))
     db.commit()

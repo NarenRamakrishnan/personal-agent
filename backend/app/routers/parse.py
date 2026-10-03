@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session
 
-from app import chunks, llm, parser, sessions
+from app import chunks, llm, parser, sessions, settings
 from app.db import get_session
 from app.models import (
     ParsedReminder,
@@ -29,12 +29,14 @@ def to_parsed(c: ReminderCreate) -> ParsedReminder:
 
 
 @router.post("/parse", response_model=ParsedReminderResponse, response_model_exclude_none=True)
-def parse_text(body: ParseRequest):
+def parse_text(body: ParseRequest, db: Session = Depends(get_session)):
     """Typed or confirmed input: parse one reminder and save nothing.
 
     The phone shows its confirm screen and then POSTs /reminders.
     """
-    candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", body.timezone)
+    prefs = settings.load(db)
+    tz_name = settings.timezone_for(prefs, body.timezone)
+    candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", tz_name, times=prefs.times)
     if not candidates:
         raise HTTPException(status_code=422, detail="No reminder found in that text")
     first, rest = to_parsed(candidates[0]), [to_parsed(c) for c in candidates[1:]]
@@ -59,10 +61,11 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     # Relative words ("tonight") resolve against when the speech happened, which for a
     # buffered chunk is captured_at and not the later moment it was sent.
     now = body.captured_at or body.now or utcnow()
+    tz_name = settings.timezone_for(settings.load(db), body.timezone)
     try:
-        rows = chunks.ingest(db, session_id, body.text, now, body.timezone)
+        rows = chunks.ingest(db, session_id, body.text, now, tz_name)
     except llm.LLMError:
-        if not chunks.queue(db, session_id, body.text, now, body.timezone):
+        if not chunks.queue(db, session_id, body.text, now, tz_name):
             # Transcripts may not be stored, so there is nowhere safe to keep it.
             raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
         response.status_code = 202

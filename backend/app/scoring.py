@@ -33,7 +33,9 @@ class Score:
         self.reasons.append({"label": label, "points": points})
 
 
-def score_reminder(reminder: Reminder, now: datetime, location_matched: bool, tz: ZoneInfo) -> Score:
+def score_reminder(
+    reminder: Reminder, now: datetime, location_matched: bool, tz: ZoneInfo, cooldown_min: int | None = None
+) -> Score:
     s = Score()
     status = timelogic.deadline_status(reminder, now)
     proximity = timelogic.window_status(reminder, now)  # deadline facts, even if snoozed or done
@@ -61,7 +63,9 @@ def score_reminder(reminder: Reminder, now: datetime, location_matched: bool, tz
         s.add("relevant place and deadline is today", 15)
     if reminder.last_notified_at is None:
         s.add("never notified before", 10)
-    elif now - reminder.last_notified_at < timedelta(minutes=config.NOTIFY_COOLDOWN_MIN):
+    elif now - reminder.last_notified_at < timedelta(
+        minutes=config.NOTIFY_COOLDOWN_MIN if cooldown_min is None else cooldown_min
+    ):
         s.add("notified recently", -40)
     if reminder.completed:
         s.add("already completed", -100)
@@ -70,13 +74,25 @@ def score_reminder(reminder: Reminder, now: datetime, location_matched: bool, tz
     return s
 
 
-def decide(reminder: Reminder, now: datetime, location_matched: bool, tz: ZoneInfo) -> dict:
-    score = score_reminder(reminder, now, location_matched, tz)
+def decide(reminder: Reminder, now: datetime, location_matched: bool, tz: ZoneInfo, prefs=None) -> dict:
+    """prefs: settings.Prefs (notification level, quiet hours). None = server defaults."""
+    from app import settings
+
+    threshold = config.NOTIFY_THRESHOLD if prefs is None else prefs.threshold
+    score = score_reminder(reminder, now, location_matched, tz, None if prefs is None else prefs.cooldown_min)
     by_time = timelogic.should_time_notify(reminder, now)
-    by_context = score.total >= config.NOTIFY_THRESHOLD
-    return {
+    by_context = score.total >= threshold
+    result = {
         "score": score.total,
         "reasons": score.reasons,
         "notify": by_time or by_context,
         "decided_by": "time" if by_time else ("context" if by_context else None),
+        "quiet_until": None,
     }
+    if result["notify"] and prefs is not None:
+        until = settings.quiet_until(prefs, now, tz)
+        if until is not None:
+            # Hold it, don't drop it: the phone re-checks (or schedules) at `quiet_until`.
+            result.update(notify=False, quiet_until=until)
+            result["reasons"] = score.reasons + [{"label": f"quiet hours until {until:%H:%M}", "points": 0}]
+    return result

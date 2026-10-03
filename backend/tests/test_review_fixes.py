@@ -153,7 +153,7 @@ def test_relative_words_resolve_against_when_the_speech_was_captured(client, mon
     seen = []
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
 
-    def fake(text, now, session_id, tz_name=None, fallback=True):
+    def fake(text, now, session_id, tz_name=None, fallback=True, **kw):
         seen.append(now)
         return []
 

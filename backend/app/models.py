@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
+from pydantic import Field as PField
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from sqlalchemy import JSON, Column, DateTime, TypeDecorator
@@ -345,6 +346,8 @@ class EvaluateResponse(ApiModel):
     notify: bool
     decided_by: Literal["time", "context"] | None = None
     reasons: list[ScoreReason]
+    # Set when a notification is due but held for quiet hours: when to deliver it.
+    quiet_until: datetime | None = None
 
 
 class ActionRow(SQLModel, table=True):
@@ -390,12 +393,14 @@ class EmailUpdate(ApiModel):
     body: str | None = Field(default=None, min_length=1, max_length=10000)
 
 
-def row_from_create(body: "ReminderCreate") -> "ReminderRow":
+def row_from_create(body: "ReminderCreate", keep_text: bool | None = None) -> "ReminderRow":
+    """keep_text: whether the words may be stored (settings.load(db).keep_transcripts).
+    Left out, it falls back to the server switch alone."""
     from app import config  # local import: config has no model deps, this keeps import order simple
 
     data = body.model_dump(exclude={"id", "created_at"})
     data["location"] = body.location.model_dump(exclude_none=True) if body.location else None
-    if not config.STORE_TRANSCRIPTS:
+    if not (config.STORE_TRANSCRIPTS if keep_text is None else keep_text):
         data["source_text"] = None
     row = ReminderRow(**data)
     if body.id:
@@ -434,3 +439,113 @@ class PrivacyInfo(ApiModel):
     store_transcripts: bool
     transcript_retention_days: int
     counts: PrivacyCounts
+
+
+# ---- User settings ---------------------------------------------------------
+# One row today (id "default"); keyed so it becomes one row per user once accounts exist.
+
+HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+NotifyLevel = Literal["fewer", "normal", "more"]
+TimezoneMode = Literal["auto", "manual"]
+
+# Abbreviations people type that aren't timezone names, and what they usually mean.
+TZ_SUGGESTIONS = {
+    "EST": "America/New_York", "EDT": "America/New_York", "ET": "America/New_York",
+    "CST": "America/Chicago", "CDT": "America/Chicago", "CT": "America/Chicago",
+    "MST": "America/Denver", "MDT": "America/Denver", "MT": "America/Denver",
+    "PST": "America/Los_Angeles", "PDT": "America/Los_Angeles", "PT": "America/Los_Angeles",
+    "IST": "Asia/Kolkata", "BST": "Europe/London", "GMT": "Europe/London",
+}
+
+
+def check_timezone(value: str | None) -> str | None:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    if value is None:
+        return None
+    name = value.strip()
+    try:
+        ZoneInfo(name)
+        if "/" not in name and name.upper() not in ("UTC",):
+            raise ValueError
+        return name
+    except (ZoneInfoNotFoundError, ValueError):
+        hint = TZ_SUGGESTIONS.get(name.upper())
+        tip = f" Did you mean {hint}?" if hint else " Use a name like America/New_York or Asia/Kolkata."
+        raise ValueError(f"'{value}' isn't a timezone name.{tip}") from None
+
+
+class SettingsRow(SQLModel, table=True):
+    __tablename__ = "settings"
+
+    id: str = Field(default="default", primary_key=True)
+    timezone_mode: str = "auto"
+    timezone: str | None = None
+    quiet_start: str | None = None
+    quiet_end: str | None = None
+    morning: str = "09:00"
+    afternoon: str = "15:00"
+    evening: str = "18:00"
+    tonight: str = "20:00"
+    notify_level: str = "normal"
+    near_radius_meters: float = 150.0
+    keep_transcripts: bool = True
+    delete_transcripts_after_days: int | None = None
+
+
+class QuietHours(ApiModel):
+    start: str = PField(pattern=HHMM, description="24-hour HH:MM, e.g. 23:00")
+    end: str = PField(pattern=HHMM, description="24-hour HH:MM, e.g. 07:00")
+
+    @model_validator(mode="after")
+    def not_empty(self):
+        if self.start == self.end:
+            raise ValueError("quiet hours need different start and end times")
+        return self
+
+
+class TimesOfDay(ApiModel):
+    morning: str = PField(default="09:00", pattern=HHMM)
+    afternoon: str = PField(default="15:00", pattern=HHMM)
+    evening: str = PField(default="18:00", pattern=HHMM)
+    tonight: str = PField(default="20:00", pattern=HHMM)
+
+
+class TimesOfDayUpdate(ApiModel):
+    # A misspelt setting must be an error, not silently ignored.
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    morning: str | None = PField(default=None, pattern=HHMM)
+    afternoon: str | None = PField(default=None, pattern=HHMM)
+    evening: str | None = PField(default=None, pattern=HHMM)
+    tonight: str | None = PField(default=None, pattern=HHMM)
+
+
+class Settings(ApiModel):
+    timezone_mode: TimezoneMode
+    timezone: str | None = None
+    quiet_hours: QuietHours | None = None
+    times_of_day: TimesOfDay
+    notify_level: NotifyLevel
+    near_radius_meters: float
+    keep_transcripts: bool
+    delete_transcripts_after_days: int | None = None
+    # Limits the server sets, so the app can explain why a switch is greyed out.
+    server_keeps_transcripts: bool
+    server_retention_days: int
+
+
+class SettingsUpdate(ApiModel):
+    # A misspelt setting must be an error, not silently ignored.
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    timezone_mode: TimezoneMode | None = None
+    timezone: str | None = Field(default=None, max_length=64)
+    quiet_hours: QuietHours | None = None  # send null to turn quiet hours off
+    times_of_day: TimesOfDayUpdate | None = None
+    notify_level: NotifyLevel | None = None
+    near_radius_meters: float | None = Field(default=None, ge=50, le=1000)
+    keep_transcripts: bool | None = None
+    delete_transcripts_after_days: int | None = Field(default=None, ge=1, le=365)  # null = no extra limit
+
+    _tz = field_validator("timezone")(lambda cls, v: check_timezone(v))

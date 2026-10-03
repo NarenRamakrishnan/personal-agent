@@ -40,9 +40,9 @@ Return ONLY a JSON object: {{"reminders": [ ... ]}}. Each reminder has:
 Rules:
 - If the person says nothing that is a task or commitment (chat, questions, opinions, small talk), return {{"reminders": []}}.
 - One reminder per distinct commitment. Split "do A and do B" into two.
-- Resolve relative words against the current local time above: "tonight" is today evening (use 20:00 unless a time is given), "tomorrow morning" is 09:00 tomorrow, a bare weekday is its next occurrence, "next Monday" is the Monday of next week.
-- A day with no time ("tomorrow", "Friday", "on Monday", "next week") is 09:00 that day.
-- Parts of a day: morning 09:00, afternoon 15:00, evening 18:00, tonight or night 20:00.
+- Resolve relative words against the current local time above: "tonight" is today evening (use {tonight} unless a time is given), "tomorrow morning" is {morning} tomorrow, a bare weekday is its next occurrence, "next Monday" is the Monday of next week.
+- A day with no time ("tomorrow", "Friday", "on Monday", "next week") is {morning} that day.
+- Parts of a day: morning {morning}, afternoon {afternoon}, evening {evening}, tonight or night {tonight}.
 - If a time is only vague ("sometime", "eventually") leave deadline null. Never invent a time the person did not imply.
 - A reminder with a place and no time is triggerType "location" with deadline null.
 - Never invent a place. Only fill "location" if a place was said.
@@ -75,9 +75,13 @@ def calendar_lines(local: datetime, days: int = 15) -> str:
     return "\n".join(lines)
 
 
-def build_messages(text: str, now: datetime, tz: ZoneInfo) -> list[dict]:
+DEFAULT_TIMES = dict(morning="09:00", afternoon="15:00", evening="18:00", tonight="20:00")
+
+
+def build_messages(text: str, now: datetime, tz: ZoneInfo, times: dict | None = None) -> list[dict]:
     local = now.astimezone(tz)
     system = SYSTEM_PROMPT.format(
+        **{**DEFAULT_TIMES, **(times or {})},
         now_local=local.strftime("%Y-%m-%d %H:%M"),
         weekday=local.strftime("%A"),
         tz=str(tz),
@@ -150,8 +154,10 @@ def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> Remin
     )
 
 
-def parse_llm(text: str, now: datetime, tz: ZoneInfo, session_id: str) -> list[ReminderCreate]:
-    data = llm.chat_json(build_messages(text, now, tz))
+def parse_llm(
+    text: str, now: datetime, tz: ZoneInfo, session_id: str, times: dict | None = None
+) -> list[ReminderCreate]:
+    data = llm.chat_json(build_messages(text, now, tz, times))
     items = data.get("reminders")
     if not isinstance(items, list):
         raise llm.LLMError("model reply had no 'reminders' list")
@@ -196,6 +202,7 @@ def parse(
     session_id: str,
     tz_name: str | None = None,
     fallback: bool = True,
+    times: dict | None = None,
 ) -> list[ReminderCreate]:
     """Parse text into candidate reminders.
 
@@ -208,7 +215,7 @@ def parse(
     if config.parser_mode() == "mock":
         return parse_mock(text, now, session_id)
     try:
-        return parse_llm(text, now, resolve_tz(tz_name), session_id)
+        return parse_llm(text, now, resolve_tz(tz_name), session_id, times)
     except llm.LLMError as e:
         log.warning("LLM parse failed: %s", e)
         if not fallback:
