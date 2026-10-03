@@ -31,3 +31,9 @@ def test_sqlite_is_unchanged():
     assert engine_options("sqlite://")[1]["poolclass"] is StaticPool
     url, kwargs = engine_options("sqlite:///x.db")
     assert url == "sqlite:///x.db" and "poolclass" not in kwargs
+
+
+def test_the_test_suite_never_points_at_a_real_database():
+    from app import config, db
+    assert config.DATABASE_URL == "sqlite://"
+    assert db.engine.url.drivername == "sqlite"

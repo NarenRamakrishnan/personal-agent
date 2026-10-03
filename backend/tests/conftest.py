@@ -1,3 +1,9 @@
+import os
+
+# Must run before anything imports app.config: .env may point at a real database
+# (Supabase), and load_dotenv never overrides a variable that is already set.
+os.environ["DATABASE_URL"] = "sqlite://"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
