@@ -7,6 +7,9 @@ const reminder: Reminder = { id: "a", title: "Call Mom", createdAt: "2026-10-10T
 describe("notification policy", () => {
   it("schedules the exact deadline", () => expect(notificationDate(reminder, now)?.toISOString()).toBe("2026-10-10T12:05:00.000Z"));
   it("uses snooze instead of original deadline", () => expect(notificationDate({ ...reminder, snoozedUntil: "2026-10-10T13:00:00Z" }, now)?.toISOString()).toBe("2026-10-10T13:00:00.000Z"));
+  it("expired snooze does not hide a later deadline", () => expect(notificationDate({ ...reminder, snoozedUntil: "2026-10-10T11:00:00Z" }, now)?.toISOString()).toBe("2026-10-10T12:05:00.000Z"));
+  it("an earlier active snooze does not fire before the requested deadline", () => expect(notificationDate({ ...reminder, snoozedUntil: "2026-10-10T12:01:00Z" }, now)?.toISOString()).toBe("2026-10-10T12:05:00.000Z"));
+  it("does not replay a counting moment already notified", () => expect(notificationDate({ ...reminder, lastNotifiedAt: "2026-10-10T12:05:00Z" }, now)).toBeUndefined());
   it.each([{ completed: true }, { triggerType: "location" as const }, { triggerType: "time_and_location" as const }, { deadline: "not a date" }, { deadline: "2026-10-09T12:00:00Z" }])("does not schedule invalid, completed or contextual reminder %j", changes => expect(notificationDate({ ...reminder, ...changes }, now)).toBeUndefined());
   it("enforces completion, snooze and 30-minute cooldown", () => {
     expect(mayNotify({ ...reminder, completed: true }, now)).toBe(false);

@@ -226,3 +226,20 @@ Final handoff distinguishes code/test completion from remaining hardware work:
 live permissions/GPS, timed delivery, geofences, background/force-quit, native mail,
 battery behavior and demo recording have not been verified on a physical phone.
 Follow the runbook before calling the plan's full real-device milestone complete.
+
+## 11 — Cross-check: speech ownership and notification dates
+
+1. Reviewed navigation-stack lifecycle and asynchronous permission flows. Found that
+   mounted hidden screens could receive global speech results, and cancellation while
+   awaiting permission could still start a recording. Added focus/ownership guards
+   and cancellation generations, including background and unmount cleanup.
+2. Added React component regression tests for unrelated speech events, duplicate taps,
+   cancellation, navigation blur, backgrounding and unmount during permission prompts.
+3. Corrected pure-time scheduling to use the later deadline/snooze rather than allowing
+   an expired or earlier snooze to override a future deadline; suppress already-notified dates.
+4. Added three date-policy regressions. `npm test`: 41 passed, four isolated integration
+   tests intentionally skipped. `npm run typecheck`: passed. No native-device claim.
+5. Added matching React 19.1 component-test dependencies. Dependency audit remains
+   40 advisories (23 high, 17 moderate, zero critical); no forced toolchain upgrade.
+6. Commit scope: speech component, notification date policy, regression tests,
+   test dependency lockfile and this step-by-step record; feature branch only.
