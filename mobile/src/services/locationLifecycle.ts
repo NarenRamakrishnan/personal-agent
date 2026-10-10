@@ -8,8 +8,11 @@ let handler: (() => void) | undefined;
 export const locationPreferenceChanged = () => handler?.();
 export async function evaluateFix(fix: Location.LocationObject) {
   if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") return;
+  // Batched background callbacks can contain old positions; never treat them as current.
+  if (!Number.isFinite(fix.timestamp) || Date.now() - fix.timestamp > 120000 || fix.timestamp > Date.now() + 10000) return;
   if (fix.coords.accuracy !== null && fix.coords.accuracy > 200) return;
   const { latitude, longitude } = fix.coords;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return;
   // Saved/coordinate reminders still work when the places provider is unavailable.
   const places = await nearbyPlaces(latitude, longitude).catch(() => []);
   return evaluateContext({ ...stamp(), latitude, longitude, nearbyPlaces: places });

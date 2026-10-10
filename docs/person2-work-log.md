@@ -243,3 +243,23 @@ Follow the runbook before calling the plan's full real-device milestone complete
    40 advisories (23 high, 17 moderate, zero critical); no forced toolchain upgrade.
 6. Commit scope: speech component, notification date policy, regression tests,
    test dependency lockfile and this step-by-step record; feature branch only.
+
+## 12 — Cross-check: context freshness and background consent
+
+1. Rechecked reminders after delayed context evaluation and before notification:
+   deleted, completed, snoozed or edited records now suppress the stale decision.
+   Rechecked foreground consent immediately before dispatch as well.
+2. Reject GPS fixes older than two minutes, future-dated fixes beyond a ten-second
+   tolerance, invalid coordinates and poor accuracy before any places-provider call.
+3. Found background permission completion could restore opt-in after a user disabled
+   tracking. Added a cancellation generation and foreground-consent recheck.
+4. Background disable now attempts to stop both geofences and updates even when one
+   native stop fails, while retaining the error and persisted opt-out.
+5. Added 13 regressions covering stale decisions, cooldown, consent, GPS validation,
+   permission cancellation and partial native cleanup failure. Full mobile suite:
+   54 passed, four isolated integration tests skipped in the default run; TypeScript passed.
+6. Separately reran the isolated HTTP integration suite: all four passed against a
+   temporary database; its server shut down automatically. Unchanged backend contract,
+   reminder, action and places suites: 124 passed. No developer data or paid API calls.
+7. Commit scope: context/location/background guards, regression tests and this record.
+   The final export and handoff audit are recorded separately in step 13.

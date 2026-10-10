@@ -15,7 +15,11 @@ export function evaluateContext(context: EvalContext, deliver = true): Promise<E
       if (reminder.triggerType === "time" || !mayNotify(reminder) || Date.now() - (ledger[reminder.id] ?? 0) < 1800000) continue;
       const decision = await contextApi.evaluate(reminder, { ...context, ...stamp() }); decisions.push(decision);
       if (deliver && decision.notify && await AsyncStorage.getItem(LOCATION_ENABLED) === "true") {
-        await notifyNow(reminder);
+        // The user may complete, delete, snooze or edit while evaluation is in flight.
+        const latest = (await reminderApi.list()).find(row => row.id === reminder.id);
+        if (!latest || !mayNotify(latest) || JSON.stringify(latest) !== JSON.stringify(reminder)) continue;
+        if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") continue;
+        await notifyNow(latest);
         ledger[reminder.id] = Date.now();
         await AsyncStorage.setItem("context-notification-ledger", JSON.stringify(ledger));
         await reminderApi.update(reminder.id, { lastNotifiedAt: new Date(ledger[reminder.id]).toISOString() });

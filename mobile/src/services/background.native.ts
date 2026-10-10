@@ -6,6 +6,7 @@ import { contextApi, reminderApi } from "../api/client";
 import { BACKGROUND_ENABLED, LOCATION_ENABLED } from "./context";
 import { evaluateFix } from "./locationLifecycle";
 const GEO = "context-assistant-geofence"; const UPDATES = "context-assistant-location";
+let consentGeneration = 0;
 async function rememberError(error: unknown) {
   // No coordinates, transcripts, or task payloads are logged.
   await AsyncStorage.setItem("context-background-status", `Last task failed at ${new Date().toISOString()}. Reopen Location to retry.`);
@@ -36,10 +37,13 @@ export async function syncBackgroundRegions() {
   if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true" && await Location.hasStartedGeofencingAsync(GEO)) await Location.stopGeofencingAsync(GEO);
 }
 export async function enableBackgroundContext() {
+  const generation = ++consentGeneration;
   if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") throw new Error("Enable foreground location first.");
   if (!await TaskManager.isAvailableAsync()) throw new Error("Background tasks need a native development build.");
   if (!(await Location.requestBackgroundPermissionsAsync()).granted) throw new Error("Background location denied. Foreground reminders still work.");
+  if (generation !== consentGeneration || await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") return;
   await AsyncStorage.setItem(BACKGROUND_ENABLED, "true");
+  if (generation !== consentGeneration) { await disableBackgroundContext(); return; }
   try {
     await syncBackgroundRegions();
     if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") return;
@@ -49,7 +53,12 @@ export async function enableBackgroundContext() {
   } catch (e) { await disableBackgroundContext(); throw e; }
 }
 export async function disableBackgroundContext() {
+  consentGeneration++;
   await AsyncStorage.setItem(BACKGROUND_ENABLED, "false");
-  if (await Location.hasStartedGeofencingAsync(GEO)) await Location.stopGeofencingAsync(GEO);
-  if (await Location.hasStartedLocationUpdatesAsync(UPDATES)) await Location.stopLocationUpdatesAsync(UPDATES);
+  const results = await Promise.allSettled([
+    (async () => { if (await Location.hasStartedGeofencingAsync(GEO)) await Location.stopGeofencingAsync(GEO); })(),
+    (async () => { if (await Location.hasStartedLocationUpdatesAsync(UPDATES)) await Location.stopLocationUpdatesAsync(UPDATES); })(),
+  ]);
+  const failure = results.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
 }
