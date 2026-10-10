@@ -14,6 +14,9 @@ Every implementation commit includes an entry in the
 [Person 2 work log](docs/person2-work-log.md). Work is on
 `person2/mobile-completion`, based on `main` at `5b8cb02`.
 
+[GitHub Actions CI](docs/ci.md) runs mobile checks/platform exports and isolated
+API integration/backend contract tests on pushes and pull requests.
+
 ```bash
 cd mobile
 npm ci

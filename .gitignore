@@ -10,3 +10,5 @@ web-build/
 !.env.example
 mobile/ios/
 mobile/android/
+mobile/test-results/
+backend/test-results/

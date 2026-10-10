@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  EXPO_NO_TELEMETRY: "1"
+  EXPO_PUBLIC_USE_MOCKS: "true"
+  PARSER_MODE: mock
+  NEBIUS_API_KEY: ""
+  API_KEY: ""
+
+jobs:
+  mobile:
+    name: Mobile checks and platform exports
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install locked mobile dependencies
+        run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Mobile regression tests
+        run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/mobile.xml
+      - name: Export web, iOS and Android bundles
+        run: npx --no-install expo export --platform all
+      - name: Upload mobile test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-test-results
+          path: mobile/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload platform exports
+        uses: actions/upload-artifact@v7
+        with:
+          name: expo-platform-exports
+          path: mobile/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  integration:
+    name: API integration and backend contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.7"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install locked backend dependencies
+        run: uv sync --locked --dev
+      - name: Install locked mobile dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Existing backend contract, reminder, action and places tests
+        run: uv run --locked pytest tests/test_contract.py tests/test_reminders.py tests/test_actions.py tests/test_places.py -q --junitxml=test-results/backend.xml
+      - name: Real HTTP mobile-to-backend integration
+        working-directory: mobile
+        run: npm run test:backend
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-contract-test-results
+          path: backend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

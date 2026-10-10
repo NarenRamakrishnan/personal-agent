@@ -279,3 +279,19 @@ Follow the runbook before calling the plan's full real-device milestone complete
    references, test evidence and remaining verification/release caveats.
 5. This commit records documentation only; implementation changes were committed
    separately in steps 11 and 12, each with its own test and work-log evidence.
+
+## 14 — GitHub Actions CI implementation
+
+1. Confirmed no existing GitHub workflows and inspected both lockfiles, backend test
+   isolation and the smoke harness. No backend source or Person 1 implementation changes.
+2. Added parallel mobile and integration jobs for pushes, pull requests and manual
+   dispatch. Mobile checks TypeScript, regressions and all-platform exports; integration
+   runs the same selected backend tests and isolated real HTTP tests used in the audit.
+3. Added locked dependency installs, Node 22/Python 3.12, cached dependencies, pinned uv,
+   read-only permissions, disabled persisted checkout credentials, concurrency and timeouts.
+4. Added seven-day JUnit/export artifacts and ignored generated local test reports.
+   CI has blank paid parser credentials and does not deploy, sign builds or use real data.
+5. Documented triggers, check names, artifacts, activation, optional administrator-owned
+   merge protection and hardware/security limitations in `docs/ci.md`; linked from README.
+6. Checked action inputs against official action documentation. Commit records the
+   workflow and documentation together; validation evidence follows in step 15.
