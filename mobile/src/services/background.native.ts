@@ -30,8 +30,10 @@ export async function syncBackgroundRegions() {
     .map(r => ({ identifier: `reminder:${r.id}`, latitude: r.location!.latitude!, longitude: r.location!.longitude!, radius: r.location!.radiusMeters ?? 150, notifyOnEnter: true, notifyOnExit: false }));
   const regions = [...places.map(p => ({ identifier: `place:${p.name}`, latitude: p.latitude, longitude: p.longitude, radius: p.radiusMeters, notifyOnEnter: true, notifyOnExit: false })), ...coordinates];
   if (regions.length > 20) throw new Error("At most 20 geofences are supported. Remove unused saved places or coordinate reminders.");
+  if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") return;
   if (regions.length) await Location.startGeofencingAsync(GEO, regions);
   else if (await Location.hasStartedGeofencingAsync(GEO)) await Location.stopGeofencingAsync(GEO);
+  if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true" && await Location.hasStartedGeofencingAsync(GEO)) await Location.stopGeofencingAsync(GEO);
 }
 export async function enableBackgroundContext() {
   if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") throw new Error("Enable foreground location first.");
@@ -40,8 +42,10 @@ export async function enableBackgroundContext() {
   await AsyncStorage.setItem(BACKGROUND_ENABLED, "true");
   try {
     await syncBackgroundRegions();
+    if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") return;
     await Location.startLocationUpdatesAsync(UPDATES, { accuracy: Location.Accuracy.Balanced, distanceInterval: 200, timeInterval: 120000, deferredUpdatesDistance: 200, deferredUpdatesInterval: 120000, pausesUpdatesAutomatically: true, showsBackgroundLocationIndicator: true,
       ...(Platform.OS === "android" ? { foregroundService: { notificationTitle: "Location reminders active", notificationBody: "Context Assistant checks places as you move." } } : {}) });
+    if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") await disableBackgroundContext();
   } catch (e) { await disableBackgroundContext(); throw e; }
 }
 export async function disableBackgroundContext() {

@@ -172,3 +172,32 @@ or cancelling in it are user/device actions, not executed during this implementa
 
 Verification: TypeScript check passed. Device sound, privacy UI round trips and
 permission-setting navigation are covered by the pending manual checklist.
+
+## 09 — Automated verification and compatibility fixes (Days 7, 13)
+
+1. Added 32 mobile tests covering restart persistence, concurrent writes, empty
+   history, real request methods, timezone/context wire shape, parser error handling,
+   pagination, mock date parsing, exact scheduling, snooze/cancel/permissions,
+   category mappings and provider distances. All 32 passed.
+2. Added `npm run test:backend`: starts the unchanged backend in mock-parser mode
+   with a uniquely allocated localhost port and temporary SQLite database. Overrides
+   credentials/database environment so developer data and paid LLM calls are never
+   used. Stops the server afterward; retains the temporary DB for inspection.
+3. Four integration tests passed through the actual mobile API client: parse/save/
+   snooze/complete/delete; saved places and grocery matching; draft/edit/approve/cancel;
+   privacy/preferences/isolated history deletion. Normal `npm test` skips these four
+   unless the isolated harness explicitly enables them.
+4. Ran unchanged backend tests: contract, reminders, actions and places — 124 passed.
+5. Exporting all platforms initially found react-native-screens 4.28 installed from
+   the original broad range, incompatible with SDK 54's code generator. Used Expo's
+   bundled versions: react-native 0.81.5, screens ~4.16.0, safe-area ~5.6.0. Subsequent
+   `npx expo export --platform all` succeeded for web, iOS and Android.
+6. Added post-await opt-in rechecks around background task registration so a disable
+   racing with registration cleans up any newly created task.
+7. Ran dependency audit. Upgraded the newly added Vitest to 4.1.11, eliminating its
+   two critical advisories. Final audit: 0 critical, 23 high, 14 moderate. Remaining
+   advisories are in the existing pinned Expo/React Native toolchain; reported fixes
+   require incompatible major changes/downgrades and were not forced here.
+8. Final TypeScript and Expo public configuration checks passed; diff whitespace
+   check passed. Native exports validate JS bundling, not native compilation or
+   physical-device delivery. No LLM credits, live location or email sends were used.
