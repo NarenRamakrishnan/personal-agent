@@ -54,3 +54,24 @@ performed as part of these work blocks.
 
 Verification: `cd mobile && npm run typecheck` passed. Physical-device persistence
 and real server round-trip checks are recorded separately in the final checklist.
+
+## 03 — Voice input and reliable activation (Days 3, 7, 11–12)
+
+1. Pinned `expo-speech-recognition@sdk-54` rather than the current package intended
+   for newer Expo releases; added its microphone/speech permission config plugin.
+2. Replaced fabricated mock transcriptions and non-existent audio uploads with
+   actual client speech recognition. Both mock and real API modes receive real text.
+3. Added interim transcript review, start/stop/discard, permission/service errors,
+   a pulsing microphone-active indicator, elapsed time, 60-second limit and haptic
+   activation feedback. Leaving the screen/backgrounding aborts the microphone.
+4. Reuse the same typed-input parse/review/save flow after speech. No raw recording
+   is persisted by this app. The platform speech service may use network recognition;
+   the UI explains that distinction before activation.
+5. Chose the plan's large push-to-talk fallback for Day 11. Always-listening wake
+   word is optional and not claimed; the reliable manual activation is implemented.
+
+Verification: TypeScript check passed. Actual microphone behavior requires a
+supported browser or a native development build; Expo Go lacks this native module.
+Sources: [speech module](https://github.com/jamsch/expo-speech-recognition),
+[Expo location](https://docs.expo.dev/versions/v54.0.0/sdk/location/),
+[Expo notifications](https://docs.expo.dev/versions/v54.0.0/sdk/notifications/).
