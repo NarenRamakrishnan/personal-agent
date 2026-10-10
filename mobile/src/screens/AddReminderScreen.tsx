@@ -13,6 +13,7 @@ export function AddReminderScreen({ navigation }: NativeStackScreenProps<RootSta
     <VoiceInput onTranscript={setText} />
     <AsyncButton title="Review reminder" action={async () => {
       if (!text.trim()) throw new Error("Enter a reminder first.");
+      if (/^(?:write|send|draft|email)\b/i.test(text.trim()) && /email|mail/i.test(text)) { navigation.navigate("Email", { text }); return; }
       navigation.navigate("ConfirmReminder", { parsed: await reminderApi.parse(text) });
     }} />
   </Page>;

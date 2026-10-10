@@ -137,3 +137,19 @@ permission and runtime testing. Query syntax source:
 Verification: TypeScript check passed. Physical-device foreground/background,
 geofence entry, permission revocation, force-quit behavior and battery measurements
 are pending and must be completed before claiming the real-device milestone.
+
+## 07 — Email draft review and composer (Day 10)
+
+1. Added typed and spoken email-command input, `/actions/email` drafting, and
+   editable recipient address, subject and body. Reminder entry routes email
+   commands into this flow as well.
+2. Display recipient names separately from addresses. A name such as Alex is never
+   treated as an address; the user must verify/provide a valid email before proceeding.
+3. Explicit Approve & open Mail first PATCHes exactly the edited fields and POSTs
+   approval, then opens the native composer (mailto fallback). The backend sends
+   nothing; the user makes the separate send decision inside their mail app.
+4. Added cancellation API action and errors that leave the draft available for retry.
+   Mock drafts are labeled by the application's demo-mode setting.
+
+Verification: TypeScript check passed. Launching a real mail composer and sending
+or cancelling in it are user/device actions, not executed during this implementation.
