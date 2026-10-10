@@ -40,6 +40,20 @@ behavior, mail composer or battery usage. Follow the Person 2 runbook's device m
 Known dependency advisories are not a gating audit in this workflow; public-release
 security remediation remains outstanding. No new Person 1 implementation was added.
 
+## Local validation
+
+Before handoff, the workflow YAML parsed without errors and its triggers, jobs and
+read-only permission were checked. `npm ci`, TypeScript, all 54 mobile tests, Expo
+web/iOS/Android exports and all four isolated HTTP tests passed under Node 22.23.3.
+The export step invokes the installed Expo CLI directly, avoiding nested npm/npx
+configuration in the local Node-version harness. Both JUnit reports were generated
+and confirmed ignored by Git. Locked uv sync and the 124 selected backend tests
+passed in the existing local Python environment (3.12.13), matching the hosted CI
+Python 3.12 target.
+
+GitHub-hosted execution and artifact uploads have not run yet. They require a branch
+push; this handoff does not claim that the hosted runner or branch protection is verified.
+
 ## Action references
 
 Action configuration was checked against the primary documentation for

@@ -44,7 +44,7 @@ jobs:
       - name: Mobile regression tests
         run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/mobile.xml
       - name: Export web, iOS and Android bundles
-        run: npx --no-install expo export --platform all
+        run: node node_modules/expo/bin/cli export --platform all
       - name: Upload mobile test results
         if: always()
         uses: actions/upload-artifact@v7

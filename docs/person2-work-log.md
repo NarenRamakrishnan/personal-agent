@@ -295,3 +295,22 @@ Follow the runbook before calling the plan's full real-device milestone complete
    merge protection and hardware/security limitations in `docs/ci.md`; linked from README.
 6. Checked action inputs against official action documentation. Commit records the
    workflow and documentation together; validation evidence follows in step 15.
+
+## 15 — CI command validation and handoff
+
+1. Parsed workflow YAML with duplicate-key checking and checked expected push/PR
+   triggers, both jobs and read-only permission. Whitespace checks passed.
+2. Ran a clean locked `npm ci` under Node 22.23.3: dependency installation succeeded;
+   audit still reports the documented 40 advisories. TypeScript and 54 mobile tests
+   passed with four isolated tests skipped; JUnit XML was generated successfully.
+3. The local nested npx Node-version harness caused npm argument/config interference
+   at its Expo invocation. Changed the workflow to invoke the installed Expo CLI
+   directly, then reran all-platform export successfully under Node 22.
+4. Ran isolated HTTP integration under Node 22: four passed; temporary server stopped.
+   Ran `uv sync --locked --dev` and all 124 selected backend tests with JUnit output:
+   passed. Explicitly checked the backend virtual environment: Python 3.12.13,
+   matching the workflow's Python 3.12 target on Ubuntu.
+5. Confirmed both generated reports are ignored and backend source still has no diff
+   from `5b8cb02`. Updated CI documentation with actual validation and runtime limits.
+6. Commit contains the export-command adjustment and validation documentation. No
+   branch push, GitHub-hosted run, repository setting change or merge was performed.
