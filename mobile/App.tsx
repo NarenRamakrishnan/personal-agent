@@ -13,6 +13,7 @@ import { ReminderDetailScreen } from "./src/screens/ReminderDetailScreen";
 import { RootStackParamList } from "./src/navigation/types";
 import { mockReminders } from "./src/data/mockReminders";
 import { Reminder } from "./src/types/reminder";
+import { LocationScreen } from "./src/screens/LocationScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -37,6 +38,7 @@ export default function App() {
       <Stack.Navigator screenOptions={{ headerShown: true, headerTintColor: "#18212F", headerShadowVisible: false, headerStyle: { backgroundColor: "#F7F8FA" }, contentStyle: { backgroundColor: "#F7F8FA" } }}>
         <Stack.Screen name="Home" options={{ headerShown: false }}>{(props) => <HomeScreen {...props} reminders={reminders} onRefresh={refresh} refreshing={refreshing} error={error} />}</Stack.Screen>
         <Stack.Screen name="AddReminder" component={AddReminderScreen} options={{ title: "" }} />
+        <Stack.Screen name="Location" component={LocationScreen} options={{ title: "Location" }} />
         <Stack.Screen name="ConfirmReminder" options={{ title: "" }}>{(props) => <ConfirmReminderScreen {...props} onSave={addReminder} />}</Stack.Screen>
         <Stack.Screen name="ReminderDetail" options={{ title: "" }}>{(props) => <ReminderDetailScreen {...props} reminders={reminders} onComplete={completeReminder} onDelete={deleteReminder} onSnooze={snoozeReminder} />}</Stack.Screen>
       </Stack.Navigator>

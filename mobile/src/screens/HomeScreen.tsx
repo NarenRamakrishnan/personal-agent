@@ -5,7 +5,7 @@ import { mockReminders } from "../data/mockReminders";
 import { ReminderCard } from "../components/ReminderCard";
 import { RootStackParamList } from "../navigation/types";
 import { Reminder } from "../types/reminder";
-import { AsyncButton } from "../components/Controls";
+import { AsyncButton, Button } from "../components/Controls";
 import { enableNotifications, reconcileNotifications } from "../services/notifications";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home"> & { reminders: Reminder[]; onRefresh: () => Promise<void>; refreshing: boolean; error: string };
@@ -27,7 +27,7 @@ export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error
         <Text style={styles.count}>{visibleReminders.length} {visibleReminders.length === 1 ? "reminder" : "reminders"}</Text>
         <Pressable onPress={() => setShowCompleted((value) => !value)}><Text style={styles.filter}>{showCompleted ? "Hide completed" : "Show completed"}</Text></Pressable>
       </View>
-      <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}><AsyncButton title="Enable reminder notifications" action={async () => { await enableNotifications(); await reconcileNotifications(reminders); }} /></View>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 10 }}><AsyncButton title="Enable reminder notifications" action={async () => { await enableNotifications(); await reconcileNotifications(reminders); }} /><Button title="Location & saved places" onPress={() => navigation.navigate("Location")} /></View>
       <FlatList
         data={visibleReminders}
         keyExtractor={(item) => item.id}

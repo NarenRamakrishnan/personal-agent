@@ -93,3 +93,24 @@ Sources: [speech module](https://github.com/jamsch/expo-speech-recognition),
 
 Verification: TypeScript check passed. Actual timed delivery and action callbacks
 remain physical-device tests; simulator/browser compilation cannot establish them.
+
+## 05 — Foreground location, places and scoring (Days 5–7, 9)
+
+1. Added optional foreground permission with explanation, balanced GPS accuracy,
+   visible coordinates/accuracy and low-accuracy rejection.
+2. Added Overpass nearby lookup with 500 m query radius, timeout, 2-minute local
+   cache, recalculated distances and OpenStreetMap attribution. Mapped provider
+   tags to the actual backend taxonomy (grocery_store, pharmacy, gym, restaurant,
+   coffee_shop, university, shopping). Public provider failures are surfaced.
+3. Added saved-place list/save/delete UI using `/saved-places`. Names are normalized,
+   radius is validated, and the backend remains the saved-place authority in real mode.
+4. Added `/evaluate-reminder` requests with current timestamp/timezone, coordinates
+   and real nearby places. Display decision reasons and notify only on backend
+   approval. Mock evaluation explicitly holds rather than inventing a real decision.
+5. Serialize evaluation, check completed/snoozed/recently-notified state, and persist
+   a local cooldown ledger before PATCHing lastNotifiedAt. API failure after delivery
+   therefore does not immediately duplicate an already displayed notification.
+
+Verification: TypeScript check passed. Live GPS and provider queries require user
+permission and runtime testing. Query syntax source:
+[Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL).
