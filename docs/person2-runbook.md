@@ -208,9 +208,14 @@ cd backend
 uv run pytest tests/test_contract.py tests/test_reminders.py tests/test_actions.py tests/test_places.py -q
 ```
 
-Recorded results: 32 mobile tests passed; 4 isolated integration tests passed;
+Recorded results after the follow-up cross-check: 54 mobile tests passed; 4 isolated integration tests passed;
 124 existing backend tests passed; TypeScript, Expo config and web/iOS/Android JS
 exports passed. Normal unit tests skip the separate integration suite by design.
+
+The follow-up review added regression coverage for microphone ownership/cancellation,
+deadline/snooze scheduling, delayed context decisions, stale GPS fixes and background
+consent cancellation. See [cross-check evidence](person2-cross-check.md) and work-log
+steps 11–13. Platform exports do not prove native compilation or physical-device behavior.
 
 Dependency audit after adding the native development client: 0 critical, 23 high,
 17 moderate advisories remain in the pinned Expo/RN toolchain. Review these before

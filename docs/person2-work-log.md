@@ -263,3 +263,19 @@ Follow the runbook before calling the plan's full real-device milestone complete
    reminder, action and places suites: 124 passed. No developer data or paid API calls.
 7. Commit scope: context/location/background guards, regression tests and this record.
    The final export and handoff audit are recorded separately in step 13.
+
+## 13 — Cross-check evidence and honest completion boundary
+
+1. Re-read the Person 2 day-by-day requirements and compared them with the runbook's
+   implementation/device-test matrix. Preserved the explicit manual activation fallback
+   and outstanding hardware, battery, UI smoke and demo-recording work.
+2. Final all-platform Expo export passed after the step 12 fixes: web, iOS, Android.
+   Confirmed Xcode is not installed (only Command Line Tools), so no native iOS build
+   or physical-device success is claimed.
+3. Verified backend source unchanged versus pulled main base `5b8cb02`, feature branch
+   active and whitespace checks passing. No push or merge.
+4. Updated runbook counts to 54 mobile tests, four isolated integrations and 124
+   selected backend tests. Added `person2-cross-check.md` with review steps, fix commit
+   references, test evidence and remaining verification/release caveats.
+5. This commit records documentation only; implementation changes were committed
+   separately in steps 11 and 12, each with its own test and work-log evidence.
