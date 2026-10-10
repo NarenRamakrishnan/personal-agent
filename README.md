@@ -1,37 +1,35 @@
 # Context Assistant
 
-This repository is organized by responsibility:
-
 ```text
-docs/    Project plans and architecture notes
-mobile/  Expo + React Native mobile application
+backend/  Person 1's FastAPI backend (unchanged by this mobile implementation)
+mobile/   Person 2's Expo/TypeScript app, platform services and tests
+docs/     Original plans, step-by-step implementation log and mobile runbook
 ```
 
-## Day 1 status
+Start with the [Person 2 runbook](docs/person2-runbook.md). It covers browser/native
+setup, mock versus real backend mode, permissions, test commands, architecture,
+demo steps and the outstanding physical-device checklist.
 
-The Day 1 mobile foundation is in `mobile/`:
-
-```text
-mobile/
-├── App.tsx
-├── app.json
-├── package.json
-├── tsconfig.json
-└── src/
-    ├── api/          Backend-ready API client with mock mode
-    ├── components/   Reusable reminder UI
-    ├── data/         Mock reminders
-    ├── navigation/   Navigation parameter types
-    ├── screens/      Home, add reminder, and detail screens
-    └── types/        Shared Reminder contract
-```
-
-Run mobile commands from the app directory:
+Every implementation commit includes an entry in the
+[Person 2 work log](docs/person2-work-log.md). Work is on
+`person2/mobile-completion`, based on `main` at `5b8cb02`.
 
 ```bash
 cd mobile
-npm install
-npm start
+npm ci
+npm run web
 ```
 
-Day 1 is local-only and supports viewing, creating, completing, and deleting reminders. Natural-language parsing, voice, location, notifications, and backend integration are intentionally deferred to later days.
+Speech recognition and background location on iOS/Android require a development
+build, not Expo Go. Native notifications/geofences are unavailable in the browser.
+
+```bash
+npm run typecheck
+npm test
+# After cd ../backend && uv sync:
+npm run test:backend
+```
+
+The mobile implementation is covered by automated tests and bundles on all three
+platforms. Actual device delivery, geofences, composer behavior, battery measurement
+and demo recording still need the runbook's manual verification.

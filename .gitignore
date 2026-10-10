@@ -8,3 +8,5 @@ web-build/
 .env
 .env.*
 !.env.example
+mobile/ios/
+mobile/android/

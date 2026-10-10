@@ -7,11 +7,13 @@ import { VoiceInput } from "../components/VoiceInput";
 import { EmailAction } from "../types/context";
 import { RootStackParamList } from "../navigation/types";
 import { openMail } from "../services/mail";
+import { USE_MOCKS } from "../api/client";
 export function EmailScreen({ route, navigation }: NativeStackScreenProps<RootStackParamList, "Email">) {
   const [command, setCommand] = useState(route.params?.text ?? ""); const [draft, setDraft] = useState<EmailAction>();
   const [to, setTo] = useState(""); const [subject, setSubject] = useState(""); const [body, setBody] = useState("");
   const [status, setStatus] = useState("");
   return <Page><Text style={{ fontSize: 28, fontWeight: "700" }}>Email draft</Text>
+    {USE_MOCKS && <Text>Demo mode uses a sample Alex draft. Connect the backend to draft your actual command.</Text>}
     {!draft ? <View style={{ gap: 16 }}><Field label="Email command" value={command} onChangeText={setCommand} multiline /><VoiceInput onTranscript={setCommand} />
       <AsyncButton title="Create draft" action={async () => {
         if (!command.trim()) throw new Error("Describe the email you want to write.");

@@ -201,3 +201,28 @@ permission-setting navigation are covered by the pending manual checklist.
 8. Final TypeScript and Expo public configuration checks passed; diff whitespace
    check passed. Native exports validate JS bundling, not native compilation or
    physical-device delivery. No LLM credits, live location or email sends were used.
+
+## 10 — Native setup, runbook and final handoff (Days 13–14)
+
+1. Added Expo development client and changed native scripts to development builds;
+   Expo Go cannot run the speech module or the required background tasks. Generated
+   native directories are ignored; native build itself remains a manual/toolchain test.
+2. Added a detailed runbook: setup, env, every screen flow, API reference, architecture,
+   commands/results, all-days task mapping, device test matrix, battery protocol and
+   a timed demo walkthrough. Replaced the outdated Day-1-only root README with links.
+3. Explicitly labeled sample email drafts in demo mode and preserved the user's
+   original Day 3 changes through the subsequent mobile implementation commits.
+4. Verified backend source has no diff from pulled `5b8cb02`; implementation commits
+   were made only on `person2/mobile-completion`. No push or merge was performed.
+5. Installing the native development client changed the final audit to 0 critical,
+   23 high and 17 moderate (40 total). The earlier step 09 result reflects its own
+   dependency state. The runbook records the final state.
+6. Reran unit tests (32 passed), TypeScript and all-platform exports after the final
+   native-client/setup changes. Introspected Expo plugin output and confirmed iOS
+   microphone/speech/location descriptions and background modes, plus Android
+   background location/foreground-service permissions. Whitespace checks passed.
+
+Final handoff distinguishes code/test completion from remaining hardware work:
+live permissions/GPS, timed delivery, geofences, background/force-quit, native mail,
+battery behavior and demo recording have not been verified on a physical phone.
+Follow the runbook before calling the plan's full real-device milestone complete.
