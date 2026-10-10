@@ -6,12 +6,11 @@ import { ReminderCard } from "../components/ReminderCard";
 import { RootStackParamList } from "../navigation/types";
 import { Reminder } from "../types/reminder";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Home"> & { reminders: Reminder[]; onChange: (reminders: Reminder[]) => void };
+type Props = NativeStackScreenProps<RootStackParamList, "Home"> & { reminders: Reminder[]; onRefresh: () => Promise<void>; refreshing: boolean; error: string };
 
-export function HomeScreen({ navigation, reminders, onChange }: Props) {
+export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
   const visibleReminders = showCompleted ? reminders : reminders.filter((reminder) => !reminder.completed);
-  const refresh = useCallback(() => onChange(reminders), [onChange, reminders]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -32,8 +31,9 @@ export function HomeScreen({ navigation, reminders, onChange }: Props) {
         contentContainerStyle={visibleReminders.length ? styles.list : styles.emptyList}
         renderItem={({ item }) => <ReminderCard reminder={item} onPress={() => navigation.navigate("ReminderDetail", { reminder: item })} />}
         ListEmptyComponent={<View><Text style={styles.emptyTitle}>Nothing here yet</Text><Text style={styles.emptyBody}>Add a reminder to get started.</Text></View>}
-        onRefresh={refresh}
-        refreshing={false}
+        ListHeaderComponent={error ? <Pressable onPress={onRefresh}><Text style={{ color: "#B54747", marginBottom: 16 }}>{error} Tap to retry.</Text></Pressable> : null}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
       />
     </SafeAreaView>
   );

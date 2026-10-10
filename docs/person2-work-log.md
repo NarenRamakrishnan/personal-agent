@@ -35,3 +35,22 @@ implementation and validation by subsystem.
 
 No deployment, email sending, main-branch implementation commit, or push is
 performed as part of these work blocks.
+
+## 02 — Real reminder API and persistent mock workflow (Days 1–2 repair)
+
+1. Replaced per-screen API instances with a shared client; added request timeout,
+   backend validation errors, optional API header, timestamp/timezone and pagination.
+2. Replaced React-state-only writes with POST/PATCH/DELETE calls. Failed saves keep
+   the user on the review screen; failed loads offer an explicit retry.
+3. Added serialized AsyncStorage mock mutations so parallel actions do not overwrite
+   each other. Empty history remains empty after restarting the app.
+4. Made confirmation edit trigger and location type, preserve category fields,
+   validate timezone-aware ISO dates, clear omitted locations, and review additional
+   parser results in sequence. Each reviewed reminder gets a stable retry ID.
+5. Replaced Alert-based delete/snooze menus with cross-platform controls and an
+   explicit delete confirmation. Detail views read the latest reminder state.
+6. Removed the obsolete `/transcribe` request. Speech recognition is restored in
+   step 03 against the actual text-only backend contract.
+
+Verification: `cd mobile && npm run typecheck` passed. Physical-device persistence
+and real server round-trip checks are recorded separately in the final checklist.

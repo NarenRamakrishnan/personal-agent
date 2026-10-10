@@ -28,4 +28,5 @@ export type ParsedReminder = {
   deadline?: string;
   triggerType: ReminderTriggerType;
   location?: ReminderLocation;
+  additional?: ParsedReminder[];
 };
