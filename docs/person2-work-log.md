@@ -114,3 +114,26 @@ remain physical-device tests; simulator/browser compilation cannot establish the
 Verification: TypeScript check passed. Live GPS and provider queries require user
 permission and runtime testing. Query syntax source:
 [Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API/Overpass_QL).
+
+## 06 — Foreground lifecycle and background geofencing (Days 8–9, 12)
+
+1. Defined geofence and background-location tasks at module scope, imported from
+   App before navigation. Native task execution reuses the same context evaluator.
+2. Registered saved places and coordinate reminders as entry-only geofences;
+   limit to 20 regions for cross-platform compatibility and report overflow.
+   Adding/deleting places or changing reminders refreshes regions.
+3. Require foreground opt-in before requesting background permission. Explicit
+   background consent starts movement-driven balanced-accuracy updates (200 m,
+   minimum/deferred 2-minute interval), OS background indicator and Android service.
+4. Added foreground movement watcher, removed on background/unmount; serialized
+   processing with no fixed GPS polling loop. Provider failure still permits
+   coordinate and saved-place evaluation. OS event timing is not guaranteed.
+5. Added stop-background and disable-all-location actions. Disabling persists the
+   preference before stopping tasks, so in-flight events cannot deliver notifications.
+   Background setup failure rolls back the opt-in and stops tasks.
+6. Background errors store only a generic timestamped retry message, not precise
+   coordinates or transcripts. Added native location plugin configuration.
+
+Verification: TypeScript check passed. Physical-device foreground/background,
+geofence entry, permission revocation, force-quit behavior and battery measurements
+are pending and must be completed before claiming the real-device milestone.

@@ -7,6 +7,8 @@ import { AsyncButton, Button, Field, Page } from "../components/Controls";
 import { EvalContext, Evaluation, SavedPlace } from "../types/context";
 import { nearbyPlaces } from "../services/places";
 import { evaluateContext, LOCATION_ENABLED } from "../services/context";
+import { disableBackgroundContext, enableBackgroundContext, syncBackgroundRegions } from "../services/background";
+import { locationPreferenceChanged } from "../services/locationLifecycle";
 
 export function LocationScreen() {
   const [enabled, setEnabled] = useState(false); const [context, setContext] = useState<EvalContext>();
@@ -20,8 +22,16 @@ export function LocationScreen() {
     <AsyncButton title="Enable location" action={async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted) throw new Error("Location permission denied. You can still use time reminders.");
-      await AsyncStorage.setItem(LOCATION_ENABLED, "true"); setEnabled(true);
+      await AsyncStorage.setItem(LOCATION_ENABLED, "true"); setEnabled(true); locationPreferenceChanged();
     }} />
+    <AsyncButton title="Disable all location access in this app" action={async () => {
+      await AsyncStorage.setItem(LOCATION_ENABLED, "false"); setEnabled(false); setContext(undefined); locationPreferenceChanged(); await disableBackgroundContext();
+    }} />
+    <Text>Background mode checks places when you move and can use more battery. It sends coordinates to the same services even when this app is closed. Your OS may delay or stop events.</Text>
+    <AsyncButton title="Enable background location & geofences" action={enableBackgroundContext} />
+    <AsyncButton title="Stop background location & geofences" action={disableBackgroundContext} />
+    <AsyncButton title="Check background status" action={async () => setStatus(await AsyncStorage.getItem("context-background-status") ?? "No background task error recorded.")} />
+    <Text>{status}</Text>
     <AsyncButton title="Get current location" action={async () => {
       if (!enabled) throw new Error("Enable location first.");
       const fix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -41,9 +51,10 @@ export function LocationScreen() {
         const meters = Number(radius); if (!name.trim() || !Number.isFinite(meters) || meters < 50 || meters > 1000) throw new Error("Enter a name and radius from 50 to 1000 meters.");
         await contextApi.savePlace({ name: name.trim().toLowerCase().replace(/\s+/g, "_"), latitude: context.latitude!, longitude: context.longitude!, radiusMeters: meters });
         setPlaces(await contextApi.savedPlaces());
+        await syncBackgroundRegions();
       }} />
     </View>}
     <AsyncButton title="Load saved places" action={async () => setPlaces(await contextApi.savedPlaces())} />
-    {places.map(place => <View key={place.name} style={{ gap: 8 }}><Text>{place.name} · {place.radiusMeters} m</Text><AsyncButton title={`Delete ${place.name}`} action={async () => { await contextApi.deletePlace(place.name); setPlaces(await contextApi.savedPlaces()); }} /></View>)}
+    {places.map(place => <View key={place.name} style={{ gap: 8 }}><Text>{place.name} · {place.radiusMeters} m</Text><AsyncButton title={`Delete ${place.name}`} action={async () => { await contextApi.deletePlace(place.name); setPlaces(await contextApi.savedPlaces()); await syncBackgroundRegions(); }} /></View>)}
   </Page>;
 }
