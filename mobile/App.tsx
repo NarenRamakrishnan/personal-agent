@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { reminderApi } from "./src/api/client";
 import { errorMessage } from "./src/components/Controls";
+import { cancelReminderNotification, listenForNotificationActions, reconcileNotifications } from "./src/services/notifications";
 import { AddReminderScreen } from "./src/screens/AddReminderScreen";
 import { ConfirmReminderScreen } from "./src/screens/ConfirmReminderScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
@@ -18,13 +19,16 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const refresh = async () => { setRefreshing(true); try { setReminders(await reminderApi.list()); setError(""); } catch (e) { setError(errorMessage(e)); } finally { setRefreshing(false); } };
+  const refresh = async () => { setRefreshing(true); try { setReminders(await reminderApi.list()); setLoaded(true); setError(""); } catch (e) { setError(errorMessage(e)); } finally { setRefreshing(false); } };
   useEffect(() => { void refresh(); }, []);
+  useEffect(() => listenForNotificationActions(() => { void refresh(); }, e => setError(errorMessage(e))), []);
+  useEffect(() => { if (loaded) void reconcileNotifications(reminders).catch(e => setError(errorMessage(e))); }, [reminders, loaded]);
   const addReminder = async (reminder: Reminder) => { const saved = await reminderApi.create(reminder); setReminders(current => [saved, ...current.filter(r => r.id !== saved.id)]); };
   const update = async (id: string, changes: Partial<Reminder>) => { const saved = await reminderApi.update(id, changes); setReminders(current => current.map(r => r.id === id ? saved : r)); };
   const completeReminder = (id: string) => update(id, { completed: true });
-  const deleteReminder = async (id: string) => { await reminderApi.remove(id); setReminders(current => current.filter(r => r.id !== id)); };
+  const deleteReminder = async (id: string) => { await reminderApi.remove(id); setReminders(current => current.filter(r => r.id !== id)); await cancelReminderNotification(id); };
   const snoozeReminder = (id: string, snoozedUntil: string) => update(id, { snoozedUntil });
 
   return (

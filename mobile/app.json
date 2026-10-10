@@ -23,6 +23,7 @@
         }
       ],
       "expo-mail-composer",
+      "expo-notifications",
       ["expo-speech-recognition", { "microphonePermission": "Allow Context Assistant to hear commands while you tap to speak.", "speechRecognitionPermission": "Allow Context Assistant to turn spoken commands into text." }]
     ]
   }

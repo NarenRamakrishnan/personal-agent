@@ -75,3 +75,21 @@ supported browser or a native development build; Expo Go lacks this native modul
 Sources: [speech module](https://github.com/jamsch/expo-speech-recognition),
 [Expo location](https://docs.expo.dev/versions/v54.0.0/sdk/location/),
 [Expo notifications](https://docs.expo.dev/versions/v54.0.0/sdk/notifications/).
+
+## 04 — Time notifications and reminder actions (Days 4, 7)
+
+1. Added native notification permission/channel/category setup, requested only when
+   the user chooses Enable reminder notifications on Home.
+2. Schedule future time reminders with stable IDs. Snooze replaces the date;
+   completion, deletion or editing cancels/replaces the old schedule. Combined
+   location/time reminders are evaluated against context rather than blindly fired.
+3. Reconcile schedules after successful initial loading and subsequent mutations;
+   serialize reconciliation to avoid races. A failed initial load does not erase
+   existing device schedules.
+4. Added Complete and Snooze 10 min notification actions, including launch response
+   handling, real API updates, error reporting and subsequent schedule reconciliation.
+5. Added explicit browser fallback: native notification controls explain the platform
+   requirement instead of claiming to schedule notifications.
+
+Verification: TypeScript check passed. Actual timed delivery and action callbacks
+remain physical-device tests; simulator/browser compilation cannot establish them.
