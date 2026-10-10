@@ -34,7 +34,7 @@ export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error
         contentContainerStyle={visibleReminders.length ? styles.list : styles.emptyList}
         renderItem={({ item }) => <ReminderCard reminder={item} onPress={() => navigation.navigate("ReminderDetail", { reminder: item })} />}
         ListEmptyComponent={<View><Text style={styles.emptyTitle}>Nothing here yet</Text><Text style={styles.emptyBody}>Add a reminder to get started.</Text></View>}
-        ListHeaderComponent={<View style={{ gap: 12, marginBottom: 16 }}><Button title="Draft an email" onPress={() => navigation.navigate("Email")} />{error ? <Pressable onPress={onRefresh}><Text style={{ color: "#B54747" }}>{error} Tap to retry.</Text></Pressable> : null}</View>}
+        ListHeaderComponent={<View style={{ gap: 12, marginBottom: 16 }}><Button title="Draft an email" onPress={() => navigation.navigate("Email")} /><Button title="Privacy & permissions" onPress={() => navigation.navigate("Privacy")} />{error ? <Pressable onPress={onRefresh}><Text style={{ color: "#B54747" }}>{error} Tap to retry.</Text></Pressable> : null}</View>}
         onRefresh={onRefresh}
         refreshing={refreshing}
       />

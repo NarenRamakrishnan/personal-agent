@@ -15,6 +15,7 @@ import { mockReminders } from "./src/data/mockReminders";
 import { Reminder } from "./src/types/reminder";
 import { LocationScreen } from "./src/screens/LocationScreen";
 import { EmailScreen } from "./src/screens/EmailScreen";
+import { PrivacyScreen } from "./src/screens/PrivacyScreen";
 import { syncBackgroundRegions } from "./src/services/background";
 import { watchForegroundContext } from "./src/services/locationLifecycle";
 
@@ -45,6 +46,7 @@ export default function App() {
         <Stack.Screen name="AddReminder" component={AddReminderScreen} options={{ title: "" }} />
         <Stack.Screen name="Location" component={LocationScreen} options={{ title: "Location" }} />
         <Stack.Screen name="Email" component={EmailScreen} options={{ title: "Email draft" }} />
+        <Stack.Screen name="Privacy" options={{ title: "Privacy" }}>{() => <PrivacyScreen onChanged={refresh} />}</Stack.Screen>
         <Stack.Screen name="ConfirmReminder" options={{ title: "" }}>{(props) => <ConfirmReminderScreen {...props} onSave={addReminder} />}</Stack.Screen>
         <Stack.Screen name="ReminderDetail" options={{ title: "" }}>{(props) => <ReminderDetailScreen {...props} reminders={reminders} onComplete={completeReminder} onDelete={deleteReminder} onSnooze={snoozeReminder} />}</Stack.Screen>
       </Stack.Navigator>

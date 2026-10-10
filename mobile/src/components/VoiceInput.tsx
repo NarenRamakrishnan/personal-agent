@@ -2,6 +2,7 @@ import { ExpoSpeechRecognitionModule as Speech, useSpeechRecognitionEvent } from
 import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Text, Vibration, View } from "react-native";
 import { Button, errorMessage } from "./Controls";
+import { activationTone } from "../services/activationTone";
 
 export function VoiceInput({ onTranscript, disabled = false }: { onTranscript: (text: string) => void; disabled?: boolean }) {
   const [status, setStatus] = useState<"idle" | "starting" | "listening" | "stopping">("idle");
@@ -40,6 +41,7 @@ export function VoiceInput({ onTranscript, disabled = false }: { onTranscript: (
       if (!Speech.isRecognitionAvailable()) throw new Error("Speech recognition is unavailable here. Use a supported browser or a development build, or type your command.");
       const permission = await Speech.requestPermissionsAsync();
       if (!permission.granted) throw new Error("Microphone or speech permission was denied. Enable it in device/browser settings, or type your command.");
+      await activationTone().catch(() => {});
       Speech.start({ lang: "en-US", interimResults: true, continuous: false, recordingOptions: { persist: false } });
     } catch (e) { setError(errorMessage(e)); setStatus("idle"); }
   };

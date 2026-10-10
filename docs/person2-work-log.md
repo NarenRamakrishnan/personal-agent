@@ -153,3 +153,22 @@ are pending and must be completed before claiming the real-device milestone.
 
 Verification: TypeScript check passed. Launching a real mail composer and sending
 or cancelling in it are user/device actions, not executed during this implementation.
+
+## 08 — Privacy controls and activation feedback (Days 11–12)
+
+1. Added a Privacy screen explaining local storage, platform speech services,
+   backend transcript retention and optional third-party coordinate lookup.
+2. Read the backend's actual privacy/settings endpoints; added transcript storage
+   disable/erase, enable (when server allows) and 1/7/30-day retention controls.
+3. Added location stop controls, link to device settings, and explicit confirmation
+   for permanent history deletion. Deletion stops background tasks and cancels this
+   app's schedules before deleting server/demo history; saved places remain.
+4. Added a generated local activation tone plus visual/haptic feedback. The cached
+   WAV is synthesized, not a microphone recording. Audio feedback failure does not
+   block speech input.
+5. Expanded `.env.example` with LAN URL advice, place provider endpoint and optional
+   development API key caveat: EXPO_PUBLIC values are bundled and not secrets.
+6. Added the test runner and test script for the final verification block.
+
+Verification: TypeScript check passed. Device sound, privacy UI round trips and
+permission-setting navigation are covered by the pending manual checklist.
