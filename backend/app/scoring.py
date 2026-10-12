@@ -23,6 +23,11 @@ from app import config, timelogic
 from app.models import Reminder
 
 
+# "Just passed" means as recently as "approaching" means soon, not the whole day a
+# reminder stays due: 20 hours overdue is not urgent context.
+NEAR_DEADLINE = timedelta(minutes=config.APPROACHING_WINDOW_MIN)
+
+
 @dataclass
 class Score:
     total: int = 0
@@ -53,7 +58,7 @@ def score_reminder(
         s.add("place matches but the deadline is on a later day", 0)
     if relevant:
         s.add("relevant place is nearby", 50)
-    if proximity in ("approaching", "due"):
+    if proximity == "approaching" or (proximity == "due" and timelogic.overdue_by(reminder, now) <= NEAR_DEADLINE):
         s.add("deadline within 2 hours or just passed", 30)
     if (
         relevant

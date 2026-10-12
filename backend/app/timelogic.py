@@ -55,6 +55,12 @@ def window_status(r: Reminder, now: datetime) -> DeadlineStatus:
     return "expired"
 
 
+def overdue_by(r: Reminder, now: datetime) -> timedelta:
+    """How long ago the reminder started counting (zero if it hasn't yet)."""
+    when = _effective_time(r, now)
+    return max(now - when, timedelta(0)) if when is not None else timedelta(0)
+
+
 def deadline_status(r: Reminder, now: datetime) -> DeadlineStatus:
     if r.completed:
         return "completed"

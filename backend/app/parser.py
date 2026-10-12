@@ -94,8 +94,15 @@ def _canonical_place(loc: dict) -> dict:
     """Make the model's place labels consistent. It sometimes calls a kind of place
     a named place ("the shopping mall" as type place), which would then only match a
     store literally named that. A known category word becomes the category, and
-    category labels are folded to our taxonomy ("supermarket" -> grocery_store)."""
+    category labels are folded to our taxonomy ("supermarket" -> grocery_store).
+    The person's own places (home, work, school) always become saved places."""
     kind = loc.get("type")
+    if kind in ("category", "place"):
+        saved = places.saved_place_name(loc.get("name") or loc.get("category"))
+        if saved in places.SAVED_PLACE_NAMES:
+            # "when I get to school" labelled as a place or category would match any
+            # college nearby and never check the person's own saved school.
+            return {"type": "saved_place", "name": saved}
     if kind == "category":
         canon = places.canonical_category(loc.get("category") or loc.get("name"))
         if canon:

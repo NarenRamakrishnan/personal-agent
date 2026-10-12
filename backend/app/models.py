@@ -5,7 +5,7 @@ Python code uses snake_case.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import Field as PField
@@ -52,6 +52,15 @@ class UTCDateTime(TypeDecorator):
         return value.replace(tzinfo=timezone.utc)
 
 
+# The phone makes session ids (UUIDs are 36). Long enough for any id scheme, short
+# enough that an id can't be used to stuff text into the database.
+SESSION_ID_MAX = 128
+
+# How far ahead of the server's clock a phone's createdAt may be. Past this it's set
+# to now: retention goes by createdAt, so a 2099 date would keep a transcript forever.
+CLOCK_SKEW = timedelta(minutes=5)
+
+
 class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -66,9 +75,11 @@ class Location(ApiModel):
     type: LocationType
     name: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=100)
-    latitude: float | None = None
-    longitude: float | None = None
-    radius_meters: float | None = None
+    # Range checks also refuse NaN and Infinity, which would be stored as null and
+    # leave a reminder that can never trigger.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    radius_meters: float | None = Field(default=None, gt=0, le=5000)
 
 
 class ReminderBase(ApiModel):
@@ -79,7 +90,7 @@ class ReminderBase(ApiModel):
     location: Location | None = None
     # Which listening session produced this reminder, so the end-of-session
     # review list is just GET /reminders?sessionId=... (Module 05).
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=SESSION_ID_MAX)
     # The words the reminder was parsed from, shown in the review list.
     source_text: str | None = Field(default=None, max_length=5000)
 
@@ -188,7 +199,7 @@ class ParseRequest(ApiModel):
     )
 
     text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, min_length=1, max_length=SESSION_ID_MAX)
     # The phone's current time and timezone, so "tonight" and "Friday" resolve
     # against the person's day and not the server's.
     now: datetime | None = None
@@ -379,7 +390,7 @@ class EmailRequest(ApiModel):
     )
 
     text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, min_length=1, max_length=SESSION_ID_MAX)
     now: datetime | None = None
     timezone: str | None = Field(default=None, max_length=64)
 
@@ -406,7 +417,7 @@ def row_from_create(body: "ReminderCreate", keep_text: bool | None = None) -> "R
     if body.id:
         row.id = body.id
     if body.created_at:
-        row.created_at = body.created_at
+        row.created_at = min(body.created_at, utcnow() + CLOCK_SKEW)
     return row
 
 

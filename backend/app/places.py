@@ -16,17 +16,24 @@ CATEGORIES: dict[str, set[str]] = {
                       "convenience_store", "food_market"},
     "pharmacy": {"pharmacy", "drugstore", "drug_store", "chemist"},
     "gym": {"gym", "fitness_center", "fitness_centre", "health_club", "sports_club"},
-    "restaurant": {"restaurant", "food", "fast_food_restaurant", "meal_takeaway", "diner"},
+    "restaurant": {"restaurant", "fast_food_restaurant", "meal_takeaway", "diner"},
     "coffee_shop": {"coffee_shop", "cafe", "coffee", "coffee_house"},
-    "university": {"university", "college", "school", "campus", "library"},
-    "shopping": {"shopping", "shopping_mall", "mall", "department_store", "clothing_store", "store"},
+    "university": {"university", "college", "library"},
+    "shopping": {"shopping", "shopping_mall", "mall", "department_store", "clothing_store"},
 }
+# Left out on purpose: generic labels a provider puts on many kinds of place ("store"
+# is on supermarkets and pharmacies, "food" on grocers), which would make "at the
+# mall" fire at CVS. And "school"/"campus": those are the person's own saved place.
 
 DEFAULT_RADIUS_M = 150.0
 
 # Words people use for their saved places, folded to one name.
 SAVED_PLACE_ALIASES = {"house": "home", "my_house": "home", "my_home": "home", "apartment": "home",
                        "dorm": "home", "office": "work", "my_work": "work", "campus": "school"}
+
+
+# The person's own places. Said as a "place" or "category", they still mean the saved one.
+SAVED_PLACE_NAMES = {"home", "work", "school"}
 
 
 def norm(term: str | None) -> str:
