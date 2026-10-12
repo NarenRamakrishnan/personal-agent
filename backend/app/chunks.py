@@ -9,6 +9,7 @@ commit, so a crash can't leave it parsed but still queued.
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, or_, update
@@ -23,8 +24,25 @@ CLAIM_TTL = timedelta(minutes=2)  # a claim older than this is from a caller tha
 MAX_CONSECUTIVE_FAILURES = 2  # a retry pass stops after this many outages in a row
 
 
+# Words that never make a commitment on their own. A chunk made only of these
+# ("yeah okay", "mm-hmm", "thank you") is skipped without a model call: most of
+# what an always-listening phone hears is this, and the spend guard counts calls.
+FILLER = {
+    "ok", "okay", "alright", "right", "yeah", "yep", "yup", "yes", "no", "nope", "nah",
+    "sure", "cool", "nice", "wow", "lol", "hmm", "hm", "mm", "mhm", "uh", "um",
+    "ah", "oh", "huh", "like", "so", "well", "hi", "hey", "hello", "bye", "thanks",
+    "thank", "you", "sorry", "mm-hmm", "uh-huh",
+}
+
+
+def is_filler(text: str) -> bool:
+    return all(w in FILLER for w in re.findall(r"[a-z]+(?:-[a-z]+)*", text.lower()))
+
+
 def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list[ReminderCreate]:
     """Parse and drop repeats. Writes nothing. Raises llm.LLMError if the model can't be used."""
+    if is_filler(text):
+        return []
     candidates = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db).times)
     for c in candidates:
         c.session_id = session_id  # never trust the parser to have set it

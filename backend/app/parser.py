@@ -120,12 +120,20 @@ def _fix_clock_change(dt: datetime, tz: ZoneInfo) -> datetime:
     return dt
 
 
+# A deadline this far before the moment the words were said is the model resolving
+# a day backwards ("Friday" read as last Friday), not something the person asked for.
+# The grace covers "at 3" said at 3:02 and a chunk that took a moment to arrive.
+PAST_DEADLINE_GRACE = timedelta(minutes=10)
+
+
 # Only these model-supplied fields are trusted. id, createdAt, completed and the
 # rest come from the server, so a bad or injected reply can't set them.
 MODEL_FIELDS = ("title", "description", "deadline", "triggerType", "location")
 
 
-def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCreate:
+def _coerce(
+    raw: dict, tz: ZoneInfo, session_id: str, source_text: str, now: datetime | None = None
+) -> ReminderCreate:
     item = {k: raw[k] for k in MODEL_FIELDS if k in raw}
     deadline = item.get("deadline")
     if isinstance(deadline, str) and deadline:
@@ -134,6 +142,11 @@ def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> Remin
         # rather than rejecting a reminder we could have saved.
         item["deadline"] = parsed if parsed.tzinfo else parsed.replace(tzinfo=tz)
         item["deadline"] = _fix_clock_change(item["deadline"], tz)
+        if now is not None and item["deadline"] < now - PAST_DEADLINE_GRACE:
+            # Saved as is it would fire at once as overdue, or never. Keep the reminder
+            # with no deadline so it lands in the review list for the person to set.
+            log.warning("cleared a deadline already in the past")
+            item["deadline"] = None
     else:
         item["deadline"] = None
     location = item.get("location")
@@ -157,6 +170,8 @@ def _coerce(raw: dict, tz: ZoneInfo, session_id: str, source_text: str) -> Remin
 def parse_llm(
     text: str, now: datetime, tz: ZoneInfo, session_id: str, times: dict | None = None
 ) -> list[ReminderCreate]:
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     data = llm.chat_json(build_messages(text, now, tz, times))
     items = data.get("reminders")
     if not isinstance(items, list):
@@ -164,18 +179,18 @@ def parse_llm(
     out = []
     for item in items:
         try:
-            out.append(_coerce(item, tz, session_id, text))
+            out.append(_coerce(item, tz, session_id, text, now))
         except (ValidationError, ValueError, TypeError, AttributeError) as e:
             # One bad item should not lose the rest of the session, and should not be
             # lost itself: the model did hear a commitment, so keep it for review.
             log.warning("salvaging unparseable reminder from model: %s", type(e).__name__)
-            salvaged = _salvage(item, tz, session_id, text)
+            salvaged = _salvage(item, tz, session_id, text, now)
             if salvaged is not None:
                 out.append(salvaged)
     return out
 
 
-def _salvage(raw, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCreate | None:
+def _salvage(raw, tz: ZoneInfo, session_id: str, source_text: str, now: datetime) -> ReminderCreate | None:
     """Keep a reminder the model produced but that failed validation.
 
     The usual culprit is a bad deadline, so first retry without one: that keeps the
@@ -188,7 +203,7 @@ def _salvage(raw, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCr
         log.warning("could not salvage unparseable reminder: not an object")
         return None
     try:
-        return _coerce({**raw, "deadline": None}, tz, session_id, source_text)
+        return _coerce({**raw, "deadline": None}, tz, session_id, source_text, now)
     except (ValidationError, ValueError, TypeError, AttributeError):
         pass
     title = raw.get("title")

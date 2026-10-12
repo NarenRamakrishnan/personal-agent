@@ -8,7 +8,7 @@ keeps the backend stateless between requests and easy to restart.
 from datetime import datetime, timedelta
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, func, select
+from sqlmodel import Session, func, or_, select
 
 from app import config, retention
 from app.models import (
@@ -153,14 +153,21 @@ def _same_deadline(a, b) -> bool:
 
 
 def drop_duplicates(db: Session, session_id: str, candidates: list) -> list:
-    """Remove candidates that repeat a reminder already saved in this session.
+    """Remove candidates that repeat a reminder already saved in this session, or one
+    from an earlier session that is still open.
 
     Chunks overlap when the app re-sends the tail of the last one, and people
-    repeat themselves, so the same commitment can arrive twice.
+    repeat themselves, within a session and across days ("I still need to return
+    that package"), so the same commitment can arrive twice. A completed reminder
+    never blocks a new one: doing it again is a new commitment.
     """
     seen = [
         (_identity(r.title, r.location), r.deadline)
-        for r in db.exec(select(ReminderRow).where(ReminderRow.session_id == session_id))
+        for r in db.exec(
+            select(ReminderRow).where(
+                or_(ReminderRow.session_id == session_id, ReminderRow.completed == False)  # noqa: E712
+            )
+        )
     ]
     kept = []
     for c in candidates:

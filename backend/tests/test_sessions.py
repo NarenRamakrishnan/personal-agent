@@ -115,10 +115,34 @@ def test_repeated_commitment_is_saved_once_per_session(client, clock):
     assert len(client.get(f"/sessions/{sid}").json()["reminders"]) == 1
 
 
-def test_same_commitment_in_a_different_session_is_kept(client, clock):
+def test_same_commitment_still_open_from_another_session_is_not_saved_again(client, clock):
     a = chunk(client, "s-a", "remind me to call Mom").json()
     b = chunk(client, "s-b", "remind me to call Mom").json()
-    assert len(a["reminders"]) == 1 and len(b["reminders"]) == 1
+    assert len(a["reminders"]) == 1 and b["reminders"] == []
+
+
+def test_same_commitment_is_kept_again_once_the_first_is_completed(client, clock):
+    a = chunk(client, "s-a", "remind me to call Mom").json()
+    client.patch(f"/reminders/{a['reminders'][0]['id']}", json={"completed": True})
+    b = chunk(client, "s-b", "remind me to call Mom").json()
+    assert len(b["reminders"]) == 1
+
+
+@pytest.mark.parametrize("text", ["yeah okay", "Mm-hmm.", "thank you!", "uh, so, like..."])
+def test_pure_filler_never_reaches_the_model(client, clock, monkeypatch, text):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: pytest.fail("model was called"))
+    r = chunk(client, "s-f", text)
+    assert r.status_code == 200 and r.json()["reminders"] == []
+
+
+@pytest.mark.parametrize("text", ["call mom", "okay buy milk", "no wait, email Alex"])
+def test_a_short_real_commitment_still_reaches_the_model(client, clock, monkeypatch, text):
+    calls = []
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", lambda *a, **k: calls.append(1) or {"reminders": []})
+    chunk(client, "s-g", text)
+    assert calls == [1]
 
 
 def test_a_failed_chunk_still_counts_as_activity_and_is_queued_not_saved(client, clock, monkeypatch):

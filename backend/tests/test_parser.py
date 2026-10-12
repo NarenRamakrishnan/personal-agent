@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -237,3 +237,25 @@ def test_heldout_phrases_live(monkeypatch):
     for f in failures:
         print("  FAIL", f)
     assert passed >= 10, f"only {passed}/{len(HELDOUT)} passed"
+
+
+def test_deadline_already_in_the_past_is_cleared_for_review(monkeypatch):
+    # "Monday" worked out as last Monday: keep the reminder, drop the wrong date.
+    out = run(monkeypatch, {"reminders": [{
+        "title": "Pay rent", "deadline": (NOW - timedelta(days=3)).isoformat(), "triggerType": "time"}]})
+    assert len(out) == 1 and out[0].title == "Pay rent"
+    assert out[0].deadline is None and out[0].trigger_type == "time"
+
+
+def test_past_deadline_on_a_place_reminder_keeps_the_place(monkeypatch):
+    out = run(monkeypatch, {"reminders": [{
+        "title": "Buy milk", "deadline": (NOW - timedelta(days=1)).isoformat(),
+        "triggerType": "time_and_location", "location": {"type": "category", "category": "grocery_store"}}]})
+    assert out[0].deadline is None and out[0].trigger_type == "location"
+
+
+def test_deadline_a_few_minutes_ago_is_kept(monkeypatch):
+    # "at 3" said at 3:05, or a chunk that took a moment to arrive.
+    when = NOW - timedelta(minutes=5)
+    out = run(monkeypatch, {"reminders": [{"title": "x", "deadline": when.isoformat(), "triggerType": "time"}]})
+    assert out[0].deadline == when
