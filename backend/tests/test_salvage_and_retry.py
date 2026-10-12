@@ -70,7 +70,7 @@ def db_with_chunks(texts):
 
 
 def fake_parse(poison=(), reminders=()):
-    def parse(text, now, session_id, tz_name=None, fallback=True, times=None):
+    def parse(text, now, session_id, tz_name=None, fallback=True, times=None, **kw):
         if text in poison:
             raise llm.ReplyError("content filtered")
         return list(reminders)
@@ -191,7 +191,7 @@ def test_the_review_reminder_is_not_saved_twice(monkeypatch):
 # ---- a refused request only counts once the config is shown to work ---------
 
 def refuse(poison):
-    def parse(text, now, session_id, tz_name=None, fallback=True, times=None):
+    def parse(text, now, session_id, tz_name=None, fallback=True, times=None, **kw):
         if text in poison:
             raise llm.RequestRefused("Nebius refused the request: BadRequestError")
         return []

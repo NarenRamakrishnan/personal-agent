@@ -63,7 +63,7 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     now = body.captured_at or body.now or utcnow()
     tz_name = settings.timezone_for(settings.load(db), body.timezone)
     try:
-        rows = chunks.ingest(db, session_id, body.text, now, tz_name)
+        rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name)
     except llm.LLMError as e:
         # A refused request may be our config, not this chunk: don't count it yet.
         attempts = 1 if isinstance(e, llm.ReplyError) and not isinstance(e, llm.RequestRefused) else 0
@@ -73,6 +73,7 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
         response.status_code = 202
         return ParseResponse(session_id=session_id, reminders=[], pending_chunks=chunks.pending_count(db, session_id))
     saved = [r.to_api() for r in rows]  # before the retry's commit expires these row objects
+    changed_api = [r.to_api() for r in changed]
     remaining = chunks.pending_count(db, session_id)
     if remaining:
         try:  # best effort: this chunk is already saved, so a failure here must not become a 500
@@ -80,4 +81,4 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
         except Exception as e:  # noqa: BLE001
             logging.getLogger(__name__).warning("backlog retry skipped: %s", type(e).__name__)
             db.rollback()
-    return ParseResponse(session_id=session_id, reminders=saved, pending_chunks=remaining)
+    return ParseResponse(session_id=session_id, reminders=saved, pending_chunks=remaining, changed=changed_api)

@@ -159,6 +159,9 @@ class ReminderRow(SQLModel, table=True):
     completed: bool = False
     last_notified_at: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
     snoozed_until: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
+    # The listening session that last updated or completed this reminder by voice, so
+    # that session's review shows the change and the person can undo it.
+    changed_in_session: str | None = Field(default=None, index=True)
 
     def to_api(self) -> Reminder:
         return Reminder.model_validate(self.model_dump())
@@ -221,6 +224,9 @@ class ParseResponse(ApiModel):
     reminders: list[Reminder]
     # Chunks the model could not parse yet. They are kept and retried, not lost.
     pending_chunks: int = 0
+    # Existing reminders this chunk updated or completed ("move the dentist to Friday",
+    # "I already got the milk"), in their new state.
+    changed: list[Reminder] = Field(default_factory=list)
 
 
 class ParsedReminder(ApiModel):
@@ -285,6 +291,8 @@ class SessionDetail(SessionInfo):
     reminders: list[Reminder]
     actions: list[Action] = Field(default_factory=list)
     pending_chunks: int = 0
+    # Reminders from earlier sessions that this session updated or completed.
+    changed: list[Reminder] = Field(default_factory=list)
 
 
 class SavedPlaceRow(SQLModel, table=True):

@@ -49,6 +49,7 @@ ADDED_COLUMNS = [
     ("pending_chunks", "attempts", "INTEGER NOT NULL DEFAULT 0"),
     ("llm_usage", "minute", "VARCHAR"),
     ("llm_usage", "minute_calls", "INTEGER NOT NULL DEFAULT 0"),
+    ("reminders", "changed_in_session", "VARCHAR"),
 ]
 
 

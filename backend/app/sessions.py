@@ -123,12 +123,18 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
         select(ActionRow).where(ActionRow.session_id == row.id).order_by(ActionRow.created_at, ActionRow.id)
     )
     pending = db.exec(select(func.count()).select_from(PendingChunkRow).where(PendingChunkRow.session_id == row.id)).one()
+    changed = db.exec(
+        select(ReminderRow)
+        .where(ReminderRow.changed_in_session == row.id, ReminderRow.session_id != row.id)
+        .order_by(ReminderRow.created_at, ReminderRow.id)
+    )
     info = SessionInfo.model_validate(row.model_dump())
     return SessionDetail(
         **info.model_dump(),
         reminders=[r.to_api() for r in reminders],
         actions=[a.to_api() for a in actions],
         pending_chunks=pending,
+        changed=[r.to_api() for r in changed],
     )
 
 

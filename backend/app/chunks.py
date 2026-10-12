@@ -13,11 +13,11 @@ import re
 import time
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, or_, update
+from sqlalchemy import case, delete, or_, update
 from sqlmodel import Session, func, select
 
 from app import config, parser, sessions, settings
-from app.models import PendingChunkRow, ReminderCreate, ReminderRow, row_from_create, utcnow
+from app.models import PendingChunkRow, Reminder, ReminderRow, row_from_create, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -41,31 +41,75 @@ def is_filler(text: str) -> bool:
     return all(w in FILLER for w in re.findall(r"[a-z]+(?:-[a-z]+)*", text.lower()))
 
 
-def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list[ReminderCreate]:
-    """Parse and drop repeats. Writes nothing. Raises llm.LLMError if the model can't be used."""
+# How many open reminders the model is shown. Each costs prompt tokens on every chunk,
+# and the spend guard counts tokens, so this session's come first, then the newest.
+OPEN_REMINDERS_MAX = 15
+
+
+def open_reminders(db: Session, session_id: str) -> dict[str, Reminder]:
+    """Open reminders keyed by a short ref (r1, r2...). The model only ever sees the
+    refs, so a change it asks for can only reach a reminder listed here."""
+    rows = db.exec(
+        select(ReminderRow)
+        .where(ReminderRow.completed == False, ReminderRow.title != parser.UNREADABLE_TITLE)  # noqa: E712
+        # case, not a bare comparison: Postgres sorts NULL (typed reminders) first on DESC.
+        .order_by(case((ReminderRow.session_id == session_id, 0), else_=1), ReminderRow.created_at.desc(), ReminderRow.id)
+        .limit(OPEN_REMINDERS_MAX)
+    ).all()
+    return {f"r{i}": row.to_api() for i, row in enumerate(rows, 1)}
+
+
+def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list:
+    """Parse and drop repeats. Writes nothing. Raises llm.LLMError if the model can't be used.
+
+    Returns new reminders (ReminderCreate) and changes to open ones (parser.Change)."""
     if is_filler(text):
         return []
-    candidates = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db).times)
+    found = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db).times,
+                         open_reminders=open_reminders(db, session_id))
+    changes = [c for c in found if isinstance(c, parser.Change)]
+    candidates = [c for c in found if not isinstance(c, parser.Change)]
     for c in candidates:
         c.session_id = session_id  # never trust the parser to have set it
-    return sessions.drop_duplicates(db, session_id, candidates)
+    return sessions.drop_duplicates(db, session_id, candidates) + changes
 
 
-def _save(db: Session, candidates: list[ReminderCreate], remove_chunk_id: str | None = None) -> list[ReminderRow]:
+def _apply(db: Session, change: "parser.Change", session_id: str) -> ReminderRow | None:
+    row = db.get(ReminderRow, change.reminder_id)
+    if row is None or row.completed:
+        return None  # deleted or finished since the model saw it
+    if change.action == "complete":
+        row.completed = True
+    else:
+        for key, value in change.fields.items():
+            if key == "location":
+                value = value.model_dump(exclude_none=True) if value is not None else None
+            setattr(row, key, value)
+    row.changed_in_session = session_id
+    db.add(row)
+    return row
+
+
+def _save(db: Session, candidates: list, remove_chunk_id: str | None = None,
+          session_id: str | None = None) -> tuple[list[ReminderRow], list[ReminderRow]]:
+    """New reminders and changes land in one commit with the chunk's removal.
+    Returns (created, changed)."""
     keep = settings.load(db).keep_transcripts
-    rows = [row_from_create(c, keep_text=keep) for c in candidates]
+    new = [c for c in candidates if not isinstance(c, parser.Change)]
+    rows = [row_from_create(c, keep_text=keep) for c in new]
     db.add_all(rows)
+    changed = [r for c in candidates if isinstance(c, parser.Change) if (r := _apply(db, c, session_id)) is not None]
     if remove_chunk_id:
         db.execute(delete(PendingChunkRow).where(PendingChunkRow.id == remove_chunk_id))
     db.commit()
-    for row in rows:
+    for row in rows + changed:
         db.refresh(row)
-    return rows
+    return rows, changed
 
 
-def ingest(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list[ReminderRow]:
-    """Parse and save. Raises llm.LLMError if the model can't be used."""
-    return _save(db, parse_candidates(db, session_id, text, now, tz_name))
+def ingest(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> tuple[list[ReminderRow], list[ReminderRow]]:
+    """Parse and save. Returns (created, changed). Raises llm.LLMError if the model can't be used."""
+    return _save(db, parse_candidates(db, session_id, text, now, tz_name), session_id=session_id)
 
 
 def queue(db: Session, session_id: str, text: str, captured_at: datetime, tz_name: str | None, attempts: int = 0) -> bool:
@@ -172,7 +216,7 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None, budget
             else:
                 with llm.time_limit(left):
                     candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
-            _save(db, candidates, remove_chunk_id=chunk_id)
+            _save(db, candidates, remove_chunk_id=chunk_id, session_id=session_id)
             outages, config_ok = 0, True
         except llm.BudgetError as e:
             log.warning("pending chunk retry stopped: %s", type(e).__name__)

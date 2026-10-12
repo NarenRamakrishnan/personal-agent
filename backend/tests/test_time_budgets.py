@@ -25,7 +25,7 @@ class FakeClock:
 
 
 def slow_parse(clock, seconds, seen):
-    def parse(text, now, session_id, tz_name=None, fallback=True, times=None):
+    def parse(text, now, session_id, tz_name=None, fallback=True, times=None, **kw):
         seen.append((text, llm._time_limit.get()))
         clock.t += seconds
         return []
