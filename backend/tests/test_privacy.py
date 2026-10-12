@@ -361,6 +361,17 @@ def test_an_unusable_reply_on_the_first_try_already_counts(client, model, monkey
     assert db_of(client).exec(select(PendingChunkRow)).one().attempts == 1
 
 
+def test_a_refused_request_on_the_first_try_does_not_count_yet(client, model, monkeypatch):
+    sid = client.post("/sessions").json()["id"]
+
+    def refused(messages, model=None):
+        raise llm.RequestRefused("Nebius refused the request: BadRequestError")
+
+    monkeypatch.setattr(llm, "chat_json", refused)
+    assert chunk(client, sid, "mumble").status_code == 202
+    assert db_of(client).exec(select(PendingChunkRow)).one().attempts == 0
+
+
 def test_an_outage_on_the_first_try_does_not_count(client, model):
     sid = client.post("/sessions").json()["id"]
     model.up = False

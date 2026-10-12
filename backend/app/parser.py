@@ -227,6 +227,19 @@ def parse_fallback(text: str, session_id: str) -> list[ReminderCreate]:
     ]
 
 
+UNREADABLE_TITLE = "Check something you said"
+
+
+def parse_unreadable(text: str, session_id: str) -> list[ReminderCreate]:
+    """A queued chunk the model never managed to read. Unlike typed text, it's mostly
+    overheard speech, so its words never become the title: the title outlives the
+    transcript (erasure and retention only clear source_text). The words stay in
+    source_text, for as long as transcripts are kept, so the person can see what it was."""
+    return [
+        ReminderCreate(title=UNREADABLE_TITLE, trigger_type="time", session_id=session_id, source_text=text)
+    ]
+
+
 def parse_mock(text: str, now: datetime, session_id: str) -> list[ReminderCreate]:
     return [
         ReminderCreate(

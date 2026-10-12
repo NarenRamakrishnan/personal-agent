@@ -26,6 +26,12 @@ class ReplyError(LLMError):
     keeps getting it is given up on instead of retried forever."""
 
 
+class RequestRefused(ReplyError):
+    """Nebius rejected the request itself (400/422). That can be this chunk, or our own
+    config (an option the model doesn't support), which would refuse every chunk. A
+    queued chunk only pays for it once another call has shown the config is fine."""
+
+
 _client: OpenAI | None = None
 
 
@@ -74,8 +80,8 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
     except LLMError:
         raise
     except (openai.BadRequestError, openai.UnprocessableEntityError) as e:
-        # Nebius was reachable and refused this particular input.
-        raise ReplyError(f"Nebius refused the request: {type(e).__name__}") from e
+        # Nebius was reachable and refused the request: this input, or our config.
+        raise RequestRefused(f"Nebius refused the request: {type(e).__name__}") from e
     except Exception as e:
         # Connection, timeout, rate limit, server error: the model may be down.
         raise LLMError(f"Nebius request failed: {type(e).__name__}") from e

@@ -53,6 +53,36 @@ def test_startup_allows_a_real_database_with_an_api_key(monkeypatch):
     from app import config, main
     monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u:p@h:5432/d")
     monkeypatch.setattr(config, "API_KEY", "k")
+    monkeypatch.setattr(config, "NEBIUS_API_KEY", "nk")
+    monkeypatch.setattr(config, "PARSER_MODE", "auto")
+    main.check_deploy_safety()
+
+
+def test_startup_refuses_a_real_database_that_would_silently_use_the_mock_parser(monkeypatch):
+    from app import config, main
+    monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u:p@h:5432/d")
+    monkeypatch.setattr(config, "API_KEY", "k")
+    monkeypatch.setattr(config, "NEBIUS_API_KEY", "")
+    monkeypatch.setattr(config, "PARSER_MODE", "auto")
+    with pytest.raises(RuntimeError, match="NEBIUS_API_KEY"):
+        main.check_deploy_safety()
+
+
+def test_startup_allows_mock_on_a_real_database_when_asked_for_by_name(monkeypatch):
+    from app import config, main
+    monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u:p@h:5432/d")
+    monkeypatch.setattr(config, "API_KEY", "k")
+    monkeypatch.setattr(config, "NEBIUS_API_KEY", "")
+    monkeypatch.setattr(config, "PARSER_MODE", "mock")
+    main.check_deploy_safety()
+
+
+def test_startup_allows_local_sqlite_with_no_nebius_key(monkeypatch):
+    from app import config, main
+    monkeypatch.setattr(config, "DATABASE_URL", "sqlite:///x.db")
+    monkeypatch.setattr(config, "API_KEY", "")
+    monkeypatch.setattr(config, "NEBIUS_API_KEY", "")
+    monkeypatch.setattr(config, "PARSER_MODE", "auto")
     main.check_deploy_safety()
 
 

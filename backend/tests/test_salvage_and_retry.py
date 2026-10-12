@@ -144,8 +144,26 @@ def test_a_chunk_that_keeps_failing_becomes_a_reminder_to_review(monkeypatch):
     assert db.exec(select(PendingChunkRow)).one().attempts == 2
     assert chunks.retry_pending(db, "s") == 0          # third failure: stop retrying
     (r,) = db.exec(select(ReminderRow)).all()          # but the words are not lost
-    assert (r.title, r.deadline, r.session_id) == ("pick up the parcel from UPS", None, "s")
+    assert (r.title, r.deadline, r.session_id) == (parser.UNREADABLE_TITLE, None, "s")
     assert r.source_text == "pick up the parcel from UPS"
+
+
+def test_overheard_words_never_become_the_title_of_a_review_reminder(monkeypatch):
+    # The title outlives the transcript: erasure and retention only clear source_text.
+    monkeypatch.setattr(config, "PENDING_MAX_ATTEMPTS", 1)
+    db = db_with_chunks(["my sister's PIN is 4821"])
+    monkeypatch.setattr(parser, "parse", fake_parse(poison={"my sister's PIN is 4821"}))
+    chunks.retry_pending(db, "s")
+    (r,) = db.exec(select(ReminderRow)).all()
+    assert "4821" not in r.title
+
+
+def test_two_different_unreadable_chunks_are_two_review_reminders(monkeypatch):
+    monkeypatch.setattr(config, "PENDING_MAX_ATTEMPTS", 1)
+    db = db_with_chunks(["call the bank", "renew the passport"])
+    monkeypatch.setattr(parser, "parse", fake_parse(poison={"call the bank", "renew the passport"}))
+    assert chunks.retry_pending(db, "s") == 0
+    assert sorted(r.source_text for r in db.exec(select(ReminderRow))) == ["call the bank", "renew the passport"]
 
 
 def test_an_outage_never_uses_up_a_chunks_attempts(monkeypatch):
@@ -168,6 +186,47 @@ def test_the_review_reminder_is_not_saved_twice(monkeypatch):
     monkeypatch.setattr(parser, "parse", fake_parse(poison={"call the bank"}))
     assert chunks.retry_pending(db, "s") == 0
     assert len(db.exec(select(ReminderRow)).all()) == 1
+
+
+# ---- a refused request only counts once the config is shown to work ---------
+
+def refuse(poison):
+    def parse(text, now, session_id, tz_name=None, fallback=True, times=None):
+        if text in poison:
+            raise llm.RequestRefused("Nebius refused the request: BadRequestError")
+        return []
+    return parse
+
+
+def test_a_config_that_refuses_every_request_never_uses_up_attempts(monkeypatch):
+    monkeypatch.setattr(config, "PENDING_MAX_ATTEMPTS", 3)
+    db = db_with_chunks(["a", "b", "c"])
+    calls = []
+
+    def refuse_all(text, *a, **k):
+        calls.append(text)
+        raise llm.RequestRefused("Nebius refused the request: BadRequestError")
+
+    monkeypatch.setattr(parser, "parse", refuse_all)
+    for _ in range(5):
+        assert chunks.retry_pending(db, "s") == 3
+    assert calls == ["a", "b"] * 5  # stops after two, like an outage
+    assert [c.attempts for c in db.exec(select(PendingChunkRow))] == [0, 0, 0]
+    assert db.exec(select(ReminderRow)).all() == []  # and no junk review reminders
+
+
+def test_a_refused_chunk_counts_when_another_chunk_got_through(monkeypatch):
+    db = db_with_chunks(["poison", "fine"])
+    monkeypatch.setattr(parser, "parse", refuse(poison={"poison"}))
+    assert chunks.retry_pending(db, "s") == 1
+    assert db.exec(select(PendingChunkRow)).one().attempts == 1
+
+
+def test_a_refused_chunk_alone_in_the_queue_is_not_counted(monkeypatch):
+    db = db_with_chunks(["poison"])
+    monkeypatch.setattr(parser, "parse", refuse(poison={"poison"}))
+    assert chunks.retry_pending(db, "s") == 1
+    assert db.exec(select(PendingChunkRow)).one().attempts == 0
 
 
 # ---- which failures count against a chunk -----------------------------------
@@ -201,8 +260,19 @@ def test_a_refused_input_is_a_reply_error(monkeypatch):
     import openai
     req = httpx.Request("POST", "https://example.invalid")
     err = openai.BadRequestError("bad", response=httpx.Response(400, request=req), body=None)
-    with pytest.raises(llm.ReplyError):
+    with pytest.raises(llm.RequestRefused):
         call_with(monkeypatch, err)
+
+
+def test_a_wrong_model_name_is_an_outage_not_the_chunks_fault(monkeypatch):
+    # Nebius answers an unknown model with 404 (checked live 2026-10-12).
+    import httpx
+    import openai
+    req = httpx.Request("POST", "https://example.invalid")
+    err = openai.NotFoundError("no such model", response=httpx.Response(404, request=req), body=None)
+    with pytest.raises(llm.LLMError) as e:
+        call_with(monkeypatch, err)
+    assert not isinstance(e.value, llm.ReplyError)
 
 
 def test_a_connection_failure_is_not_a_reply_error(monkeypatch):

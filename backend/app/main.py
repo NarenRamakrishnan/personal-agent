@@ -18,12 +18,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 def check_deploy_safety() -> None:
     """Refuse to start an open server on a real database. Without API_KEY anyone who
-    can reach it could read, change and delete reminders and spend Nebius credits."""
+    can reach it could read, change and delete reminders and spend Nebius credits.
+    Also refuse to fall back to the mock parser there just because the key is missing."""
     if not config.DATABASE_URL.startswith("sqlite") and not config.API_KEY:
         raise RuntimeError(
             "API_KEY must be set when DATABASE_URL is not local SQLite. "
             "Add API_KEY=<a long random string> to backend/.env (or the host's env) "
             "and have the app send it as the X-API-Key header."
+        )
+    if not config.DATABASE_URL.startswith("sqlite") and config.PARSER_MODE == "auto" and config.parser_mode() == "mock":
+        # auto falls back to the mock parser without a key, which turns every chunk the
+        # phone hears into a reminder. Locally that's the point; deployed it's a mistake.
+        raise RuntimeError(
+            "NEBIUS_API_KEY is not set, so the parser would run in mock mode on a real database. "
+            "Set NEBIUS_API_KEY, or PARSER_MODE=mock if that is really what you want."
         )
 
 
