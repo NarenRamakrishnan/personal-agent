@@ -18,6 +18,7 @@ from app.models import (
     SessionDetail,
     SessionInfo,
     SessionRow,
+    readable,
     utcnow,
 )
 
@@ -131,10 +132,10 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
     info = SessionInfo.model_validate(row.model_dump())
     return SessionDetail(
         **info.model_dump(),
-        reminders=[r.to_api() for r in reminders],
+        reminders=readable(reminders),
         actions=[a.to_api() for a in actions],
         pending_chunks=pending,
-        changed=[r.to_api() for r in changed],
+        changed=readable(changed),
     )
 
 

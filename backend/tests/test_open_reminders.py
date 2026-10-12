@@ -175,3 +175,41 @@ def test_init_db_adds_changed_in_session_to_an_existing_reminders_table():
                           " created_at DATETIME NOT NULL, trigger_type VARCHAR NOT NULL)"))
     init_db(eng)
     assert "changed_in_session" in {c["name"] for c in inspect(eng).get_columns("reminders")}
+
+
+# ---- a stored row that no longer validates can't break parsing or the review ----
+
+def bad_row(client, id="legacy", session_id="s2"):
+    # Saved before radius was checked: it can't be read back as a Reminder any more.
+    db = db_of(client)
+    db.add(ReminderRow(id=id, title="Old one", trigger_type="location", session_id=session_id,
+                       location={"type": "coordinate", "latitude": 1, "longitude": 1, "radiusMeters": -5}))
+    db.commit()
+
+
+def test_an_unreadable_stored_reminder_is_skipped_not_fatal(client, model):
+    bad_row(client)
+    remember(client, "milk", "Buy milk")
+    model.reply = {"reminders": [{"title": "Call Mom", "triggerType": "time"}]}
+    r = client.post("/sessions/parse", json={"text": "call mom", "sessionId": "s2"})
+    assert r.status_code == 200
+    assert "Buy milk" in model.prompts[-1] and "Old one" not in model.prompts[-1]
+
+
+def test_the_session_review_survives_an_unreadable_row(client, model):
+    say(client, "hello there", sid="s2")
+    bad_row(client)
+    r = client.get("/sessions/s2")
+    assert r.status_code == 200 and "legacy" not in [x["id"] for x in r.json()["reminders"]]
+
+
+def test_a_bad_stored_row_can_be_fixed_with_patch(client, model):
+    bad_row(client)
+    fixed = {"location": {"type": "coordinate", "latitude": 1, "longitude": 1, "radiusMeters": 100}}
+    r = client.patch("/reminders/legacy", json=fixed)
+    assert r.status_code == 200 and r.json()["location"]["radiusMeters"] == 100
+
+
+def test_evaluating_a_bad_stored_row_is_a_clear_error(client, model):
+    bad_row(client)
+    assert client.post("/evaluate-reminder", json={"reminderId": "legacy"}).status_code == 422

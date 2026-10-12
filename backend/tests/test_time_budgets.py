@@ -214,3 +214,16 @@ def test_a_three_minute_pause_keeps_the_session_by_default(client, monkeypatch):
     assert chunk(client, sid, "buy milk").status_code == 200
     now["t"] = t + timedelta(minutes=3 + 11)
     assert client.get(f"/sessions/{sid}").json()["status"] == "ended"
+
+
+def test_the_phones_own_chunk_gets_one_time_limited_try(client, monkeypatch):
+    seen = []
+
+    def chat(messages, model=None):
+        seen.append(llm._time_limit.get())
+        return {"reminders": []}
+
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", chat)
+    client.post("/sessions/parse", json={"text": "buy milk", "sessionId": "t"})
+    assert seen == [config.CHUNK_PARSE_TIMEOUT_S]

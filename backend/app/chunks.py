@@ -17,7 +17,7 @@ from sqlalchemy import case, delete, or_, update
 from sqlmodel import Session, func, select
 
 from app import config, parser, sessions, settings
-from app.models import PendingChunkRow, Reminder, ReminderRow, row_from_create, utcnow
+from app.models import PendingChunkRow, Reminder, ReminderRow, readable, row_from_create, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def open_reminders(db: Session, session_id: str) -> dict[str, Reminder]:
         .order_by(case((ReminderRow.session_id == session_id, 0), else_=1), ReminderRow.created_at.desc(), ReminderRow.id)
         .limit(OPEN_REMINDERS_MAX)
     ).all()
-    return {f"r{i}": row.to_api() for i, row in enumerate(rows, 1)}
+    return {f"r{i}": r for i, r in enumerate(readable(rows), 1)}
 
 
 def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list:

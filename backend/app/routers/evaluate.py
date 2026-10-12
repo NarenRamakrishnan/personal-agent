@@ -58,7 +58,10 @@ def evaluate_reminder(body: EvaluateRequest, db: Session = Depends(get_session))
         row = db.get(ReminderRow, body.reminder_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Reminder not found")
-        reminder = row.to_api()
+        try:
+            reminder = row.to_api()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="This reminder's saved data is invalid; fix it with PATCH")
     else:
         reminder = body.reminder
     now = body.context.now or utcnow()

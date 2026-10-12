@@ -4,6 +4,7 @@ API fields are camelCase on the wire to match the TypeScript types on mobile.
 Python code uses snake_case.
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -165,6 +166,18 @@ class ReminderRow(SQLModel, table=True):
 
     def to_api(self) -> Reminder:
         return Reminder.model_validate(self.model_dump())
+
+
+def readable(rows) -> list[Reminder]:
+    """Rows as API reminders, skipping any that no longer pass validation (saved before
+    a check was added, or edited by hand), so one bad row can't fail a whole request."""
+    out = []
+    for row in rows:
+        try:
+            out.append(row.to_api())
+        except ValueError:  # pydantic's ValidationError is a ValueError
+            logging.getLogger(__name__).error("skipping unreadable reminder row %s", row.id)
+    return out
 
 
 # Actions (Module 05/09). Email always needs a manual approval before anything

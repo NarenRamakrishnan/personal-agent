@@ -63,7 +63,8 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     now = body.captured_at or body.now or utcnow()
     tz_name = settings.timezone_for(settings.load(db), body.timezone)
     try:
-        rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name)
+        with llm.time_limit(config.CHUNK_PARSE_TIMEOUT_S):
+            rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name)
     except llm.LLMError as e:
         # A refused request may be our config, not this chunk: don't count it yet.
         attempts = 1 if isinstance(e, llm.ReplyError) and not isinstance(e, llm.RequestRefused) else 0
