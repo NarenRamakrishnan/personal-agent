@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import chunks, config, llm, parser, retention, sessions
 from app.db import get_session
@@ -79,7 +79,7 @@ def test_ending_the_session_retries_what_the_model_missed(client, model):
     assert [x["title"] for x in ended["reminders"]] == ["BUY EGGS"]
 
 
-def test_retry_goes_in_capture_order_and_stops_at_the_first_failure(client, model, monkeypatch):
+def test_retry_goes_in_capture_order_and_a_failing_chunk_does_not_block_the_next(client, model, monkeypatch):
     sid = client.post("/sessions").json()["id"]
     model.up = False
     for i, text in enumerate(["first", "second", "third"]):
@@ -94,13 +94,13 @@ def test_retry_goes_in_capture_order_and_stops_at_the_first_failure(client, mode
 
     monkeypatch.setattr(llm, "chat_json", flaky)
     left = client.post(f"/sessions/{sid}/retry").json()
-    assert seen == ["first", "second"]                    # oldest first, and "third" was NOT attempted
-    assert left["pendingChunks"] == 2                      # second and third are still waiting
-    assert [x["title"] for x in left["reminders"]] == ["FIRST"]
+    assert seen == ["first", "second", "third"]           # oldest first, and "third" is still tried after "second" fails
+    assert left["pendingChunks"] == 1                      # only "second" is still waiting
+    assert [x["title"] for x in left["reminders"]] == ["FIRST", "THIRD"]
     seen.clear()
     fail_at["n"] = None
-    done = client.post(f"/sessions/{sid}/retry").json()    # model is fine now: the rest go through in order
-    assert seen == ["second", "third"] and done["pendingChunks"] == 0
+    done = client.post(f"/sessions/{sid}/retry").json()    # model is fine now: the one left goes through
+    assert seen == ["second"] and done["pendingChunks"] == 0
 
 
 def test_retry_uses_the_time_the_speech_was_captured(client, monkeypatch):
@@ -348,3 +348,21 @@ def test_unicode_text_round_trips_and_nul_is_stripped(client, model):
     wild = "remind me \U0001F600 ‮​ café 大学"
     r = client.post("/sessions/parse", json={"text": wild + "\x00", "sessionId": "u"})
     assert r.status_code == 200 and r.json()["reminders"][0]["sourceText"] == wild
+
+
+def test_an_unusable_reply_on_the_first_try_already_counts(client, model, monkeypatch):
+    sid = client.post("/sessions").json()["id"]
+
+    def unusable(messages, model=None):
+        raise llm.ReplyError("model reply had no JSON object")
+
+    monkeypatch.setattr(llm, "chat_json", unusable)
+    assert chunk(client, sid, "mumble").status_code == 202
+    assert db_of(client).exec(select(PendingChunkRow)).one().attempts == 1
+
+
+def test_an_outage_on_the_first_try_does_not_count(client, model):
+    sid = client.post("/sessions").json()["id"]
+    model.up = False
+    assert chunk(client, sid, "buy eggs").status_code == 202
+    assert db_of(client).exec(select(PendingChunkRow)).one().attempts == 0

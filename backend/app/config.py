@@ -88,4 +88,7 @@ NOTIFY_COOLDOWN_MIN = _env_int("NOTIFY_COOLDOWN_MIN", 30)
 STORE_TRANSCRIPTS = _env_bool("STORE_TRANSCRIPTS", True)
 TRANSCRIPT_RETENTION_DAYS = _env_int("TRANSCRIPT_RETENTION_DAYS", 30)  # 0 keeps them until deleted
 PENDING_RETRY_LIMIT = _env_int("PENDING_RETRY_LIMIT", 10)
+# A queued chunk the model answers but can't parse this many times is kept as a
+# plain reminder for review instead. Outages never count towards it.
+PENDING_MAX_ATTEMPTS = _env_int("PENDING_MAX_ATTEMPTS", 3, minimum=1)
 LATE_CHUNK_TOLERANCE_S = _env_int("LATE_CHUNK_TOLERANCE_S", 5)

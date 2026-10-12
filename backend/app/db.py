@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit
 
+from sqlalchemy import inspect, text
 from sqlalchemy.pool import NullPool, StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -41,12 +42,44 @@ def make_engine(url: str):
 engine = make_engine(config.DATABASE_URL)
 
 
+# There are no migrations yet: create_all makes missing tables but never adds a
+# column to a table that already exists. A column added after the first deploy
+# goes here, so a database created earlier (Supabase) gets it on the next start.
+ADDED_COLUMNS = [
+    ("pending_chunks", "attempts", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+
+def _add_missing_columns(eng) -> None:
+    insp = inspect(eng)
+    tables = set(insp.get_table_names())
+    with eng.begin() as conn:
+        for table, column, ddl in ADDED_COLUMNS:
+            if table in tables and column not in {c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'))
+
+
+def rls_statements() -> list[str]:
+    return [f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY' for name in sorted(SQLModel.metadata.tables)]
+
+
 def init_db(eng=None) -> None:
     # Tables only exist in the metadata once their classes are imported. Import them
     # here so init_db works no matter what the caller happened to import first.
     import app.models  # noqa: F401
 
-    SQLModel.metadata.create_all(eng or engine)
+    eng = eng or engine
+    SQLModel.metadata.create_all(eng)
+    _add_missing_columns(eng)
+    if eng.dialect.name == "postgresql":
+        # Supabase serves every table in the public schema over its REST API to anyone
+        # holding the project's public anon key; row level security with no policies
+        # closes that. Our project already turns RLS on for new tables (its `ensure_rls`
+        # event trigger), so this is a backstop for a Postgres without that trigger.
+        # This backend connects as the tables' owner, which RLS doesn't restrict.
+        with eng.begin() as conn:
+            for statement in rls_statements():
+                conn.execute(text(statement))
 
 
 def get_session():

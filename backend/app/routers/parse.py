@@ -64,8 +64,9 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     tz_name = settings.timezone_for(settings.load(db), body.timezone)
     try:
         rows = chunks.ingest(db, session_id, body.text, now, tz_name)
-    except llm.LLMError:
-        if not chunks.queue(db, session_id, body.text, now, tz_name):
+    except llm.LLMError as e:
+        attempts = 1 if isinstance(e, llm.ReplyError) else 0
+        if not chunks.queue(db, session_id, body.text, now, tz_name, attempts=attempts):
             # Transcripts may not be stored, so there is nowhere safe to keep it.
             raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
         response.status_code = 202

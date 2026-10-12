@@ -160,15 +160,43 @@ def parse_llm(
     data = llm.chat_json(build_messages(text, now, tz, times))
     items = data.get("reminders")
     if not isinstance(items, list):
-        raise llm.LLMError("model reply had no 'reminders' list")
+        raise llm.ReplyError("model reply had no 'reminders' list")
     out = []
     for item in items:
         try:
             out.append(_coerce(item, tz, session_id, text))
         except (ValidationError, ValueError, TypeError, AttributeError) as e:
-            # One bad item should not lose the rest of the session.
-            log.warning("dropped unparseable reminder from model: %s", type(e).__name__)
+            # One bad item should not lose the rest of the session, and should not be
+            # lost itself: the model did hear a commitment, so keep it for review.
+            log.warning("salvaging unparseable reminder from model: %s", type(e).__name__)
+            salvaged = _salvage(item, tz, session_id, text)
+            if salvaged is not None:
+                out.append(salvaged)
     return out
+
+
+def _salvage(raw, tz: ZoneInfo, session_id: str, source_text: str) -> ReminderCreate | None:
+    """Keep a reminder the model produced but that failed validation.
+
+    The usual culprit is a bad deadline, so first retry without one: that keeps the
+    title, place and trigger type. If it still fails, keep just the model's title with
+    no deadline, so it lands in the review list for the person to fix instead of
+    firing at a wrong time. An item with no usable title is dropped: nothing says
+    what the commitment was, and guessing would invent a reminder.
+    """
+    if not isinstance(raw, dict):
+        log.warning("could not salvage unparseable reminder: not an object")
+        return None
+    try:
+        return _coerce({**raw, "deadline": None}, tz, session_id, source_text)
+    except (ValidationError, ValueError, TypeError, AttributeError):
+        pass
+    title = raw.get("title")
+    title = title.strip()[:80] if isinstance(title, str) else ""
+    if not title:
+        log.warning("could not salvage unparseable reminder: no usable title")
+        return None
+    return ReminderCreate(title=title, trigger_type="time", session_id=session_id, source_text=source_text)
 
 
 def parse_fallback(text: str, session_id: str) -> list[ReminderCreate]:

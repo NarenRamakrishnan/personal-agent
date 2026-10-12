@@ -423,6 +423,8 @@ class PendingChunkRow(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
     # Set while one caller is parsing this chunk, so two callers can't both process it.
     claimed_at: datetime | None = Field(default=None, sa_column=Column(UTCDateTime))
+    # Times the model answered but couldn't parse it (llm.ReplyError). Outages don't count.
+    attempts: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
 
 
 class PrivacyCounts(ApiModel):

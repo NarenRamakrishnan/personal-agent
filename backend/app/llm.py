@@ -6,6 +6,7 @@ swapping models is a config change and not a code change.
 
 import json
 
+import openai
 from openai import OpenAI
 
 from app import config, usage
@@ -17,6 +18,12 @@ class LLMError(Exception):
 
 class BudgetError(LLMError):
     """A spend limit was reached, so the call was refused before reaching Nebius."""
+
+
+class ReplyError(LLMError):
+    """The model answered, but not usably for this input (refused it, or replied with
+    no usable JSON). Unlike an outage this is about the text, so a queued chunk that
+    keeps getting it is given up on instead of retried forever."""
 
 
 _client: OpenAI | None = None
@@ -41,11 +48,11 @@ def extract_json(text: str) -> dict:
         text = text.split("</think>", 1)[1]
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end < start:
-        raise LLMError("model reply had no JSON object")
+        raise ReplyError("model reply had no JSON object")
     try:
         return json.loads(text[start : end + 1])
     except json.JSONDecodeError as e:
-        raise LLMError(f"model reply was not valid JSON: {e}") from e
+        raise ReplyError(f"model reply was not valid JSON: {e}") from e
 
 
 def chat_json(messages: list[dict], model: str | None = None) -> dict:
@@ -64,12 +71,19 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
             temperature=0,
             response_format={"type": "json_object"},
         )
-        content = response.choices[0].message.content or ""
     except LLMError:
         raise
+    except (openai.BadRequestError, openai.UnprocessableEntityError) as e:
+        # Nebius was reachable and refused this particular input.
+        raise ReplyError(f"Nebius refused the request: {type(e).__name__}") from e
     except Exception as e:
-        # Includes an empty/None `choices` (content filtering, provider errors).
+        # Connection, timeout, rate limit, server error: the model may be down.
         raise LLMError(f"Nebius request failed: {type(e).__name__}") from e
+    try:
+        content = response.choices[0].message.content or ""
+    except (AttributeError, IndexError, TypeError) as e:
+        # An empty/None `choices` (content filtering): it answered, with nothing.
+        raise ReplyError(f"Nebius reply had no message: {type(e).__name__}") from e
     try:
         usage.record_tokens(response.usage.total_tokens)
     except Exception:

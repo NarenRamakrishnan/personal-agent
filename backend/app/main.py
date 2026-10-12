@@ -16,14 +16,20 @@ from app.routers import actions, evaluate, parse, privacy, reminders, sessions, 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def check_deploy_safety() -> None:
+    """Refuse to start an open server on a real database. Without API_KEY anyone who
+    can reach it could read, change and delete reminders and spend Nebius credits."""
+    if not config.DATABASE_URL.startswith("sqlite") and not config.API_KEY:
+        raise RuntimeError(
+            "API_KEY must be set when DATABASE_URL is not local SQLite. "
+            "Add API_KEY=<a long random string> to backend/.env (or the host's env) "
+            "and have the app send it as the X-API-Key header."
+        )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    if not config.DATABASE_URL.startswith("sqlite") and not config.API_KEY:
-        logging.getLogger(__name__).critical(
-            "API_KEY is not set but the database is not local SQLite: "
-            "anyone who can reach this server can read, change and delete reminders "
-            "and spend Nebius credits."
-        )
+    check_deploy_safety()
     init_db()
     with Session(engine) as db:
         retention.purge_expired(db)
