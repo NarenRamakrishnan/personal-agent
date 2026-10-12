@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session
 
-from app import chunks, sessions
+from app import chunks, config, sessions
 from app.db import get_session
 from app.models import SessionDetail, SessionInfo, SessionRow
 from app.security import require_api_key
@@ -32,7 +32,8 @@ def get_session_detail(session_id: str, db: Session = Depends(get_session)):
 @router.post("/{session_id}/end", response_model=SessionDetail, response_model_exclude_none=True)
 def end_session(session_id: str, db: Session = Depends(get_session)):
     row = sessions.end(db, get_or_404(db, session_id))
-    chunks.retry_pending(db, row.id)  # anything the model missed gets another chance before review
+    # Anything the model missed gets another chance before review, within a time limit.
+    chunks.retry_pending(db, row.id, budget_s=config.PENDING_RETRY_BUDGET_S)
     return sessions.detail(db, row)
 
 
@@ -40,5 +41,5 @@ def end_session(session_id: str, db: Session = Depends(get_session)):
 def retry_session(session_id: str, db: Session = Depends(get_session)):
     """Re-try chunks the model couldn't parse earlier. Safe to call any time."""
     row = get_or_404(db, session_id)
-    chunks.retry_pending(db, row.id)
+    chunks.retry_pending(db, row.id, budget_s=config.PENDING_RETRY_BUDGET_S)
     return sessions.detail(db, row)

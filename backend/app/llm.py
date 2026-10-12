@@ -5,6 +5,8 @@ swapping models is a config change and not a code change.
 """
 
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import openai
 from openai import OpenAI
@@ -33,6 +35,20 @@ class RequestRefused(ReplyError):
 
 
 _client: OpenAI | None = None
+
+# Seconds the current call may take, when a caller is working against a deadline.
+_time_limit: ContextVar[float | None] = ContextVar("llm_time_limit", default=None)
+
+
+@contextmanager
+def time_limit(seconds: float):
+    """Calls inside this block give up after `seconds` and don't retry. The usual
+    30 seconds plus one retry is fine for one chunk, not for a backlog in a request."""
+    token = _time_limit.set(seconds)
+    try:
+        yield
+    finally:
+        _time_limit.reset(token)
 
 
 def get_client() -> OpenAI:
@@ -71,7 +87,11 @@ def chat_json(messages: list[dict], model: str | None = None) -> dict:
         # the caller's fallback (queue, or keep the typed text) still runs.
         raise LLMError(f"spend guard unavailable: {type(e).__name__}") from e
     try:
-        response = get_client().chat.completions.create(
+        client = get_client()
+        limit = _time_limit.get()
+        if limit is not None:
+            client = client.with_options(timeout=limit, max_retries=0)
+        response = client.chat.completions.create(
             model=model or config.NEBIUS_MODEL,
             messages=messages,
             temperature=0,

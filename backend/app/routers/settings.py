@@ -1,8 +1,10 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, update
-from sqlmodel import Session
+from sqlmodel import Session, func, select
 
-from app import retention, settings
+from app import chunks, config, retention, settings
 from app.db import get_session
 from app.models import ActionRow, PendingChunkRow, ReminderRow, Settings, SettingsUpdate
 from app.security import require_api_key
@@ -23,6 +25,8 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_session)):
     Turning "keep what I said" off also erases what is already kept, and
     shortening how long words are kept applies to existing ones straight away:
     a privacy switch should mean the same thing for the past as for the future.
+    Chunks still waiting for the model get one last try first, so a commitment in
+    them isn't lost along with the words; the response says how many weren't saved.
     """
     row = settings.get_row(db)
     sent = body.model_fields_set
@@ -56,11 +60,39 @@ def update_settings(body: SettingsUpdate, db: Session = Depends(get_session)):
     db.commit()
     db.refresh(row)
 
+    unparsed = None
     if turned_off:
+        unparsed = _parse_queued_chunks(db)
         for model in (ReminderRow, ActionRow):
             db.execute(update(model).where(model.source_text.is_not(None)).values(source_text=None))
         db.execute(delete(PendingChunkRow))
         db.commit()
     if "delete_transcripts_after_days" in sent:
         retention.purge_expired(db)
-    return settings.to_api(row)
+    out = settings.to_api(row)
+    if unparsed is not None:
+        out.unparsed_chunks_deleted = unparsed
+    return out
+
+
+def _parse_queued_chunks(db: Session) -> int:
+    """Give every queued chunk a last try within one time limit, oldest session first.
+    What's saved has no words (keep_transcripts is already off). Returns how many
+    chunks are still queued, which the caller then deletes."""
+    started = time.monotonic()
+    session_ids = db.exec(
+        select(PendingChunkRow.session_id).group_by(PendingChunkRow.session_id)
+        .order_by(func.min(PendingChunkRow.captured_at))
+    ).all()
+    left = 0
+    for sid in session_ids:
+        budget = config.PENDING_RETRY_BUDGET_S - (time.monotonic() - started)
+        if budget < chunks.MIN_CALL_S:
+            left += chunks.pending_count(db, sid)
+            continue
+        try:
+            left += chunks.retry_pending(db, sid, budget_s=budget)
+        except Exception:  # noqa: BLE001 - the switch must still turn off
+            db.rollback()
+            left += chunks.pending_count(db, sid)
+    return left

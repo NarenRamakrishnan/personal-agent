@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app import config, usage
+from app import config
 from app import db as app_db
 from app.db import get_session, init_db, make_engine
 from app.main import app
@@ -19,7 +19,6 @@ def _isolated_config(monkeypatch, request):
     # Tests never depend on the developer's real .env.
     monkeypatch.setattr(config, "API_KEY", "")
     monkeypatch.setattr(config, "PARSER_MODE", "mock")
-    usage.reset_throttle()
     if not request.node.get_closest_marker("live"):
         # Spend-guard counters go to a throwaway database, never the real one.
         # Live tests spend real credits, so they DO count against the real counters.

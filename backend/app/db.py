@@ -47,6 +47,8 @@ engine = make_engine(config.DATABASE_URL)
 # goes here, so a database created earlier (Supabase) gets it on the next start.
 ADDED_COLUMNS = [
     ("pending_chunks", "attempts", "INTEGER NOT NULL DEFAULT 0"),
+    ("llm_usage", "minute", "VARCHAR"),
+    ("llm_usage", "minute_calls", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

@@ -67,7 +67,9 @@ LLM_CALLS_PER_MINUTE = _env_int("LLM_CALLS_PER_MINUTE", 60)
 
 # Listening sessions (Module 04). A session ends when the app says so, after this
 # many seconds with no chunks, or at the hard maximum. Checked lazily on read.
-SESSION_SILENCE_TIMEOUT_S = _env_int("SESSION_SILENCE_TIMEOUT_S", 120)
+# 10 minutes: a pause that long is normal in a conversation the phone is listening to,
+# and a shorter one splits one conversation into several sessions to review.
+SESSION_SILENCE_TIMEOUT_S = _env_int("SESSION_SILENCE_TIMEOUT_S", 600)
 SESSION_MAX_DURATION_S = _env_int("SESSION_MAX_DURATION_S", 1800)
 
 
@@ -88,6 +90,11 @@ NOTIFY_COOLDOWN_MIN = _env_int("NOTIFY_COOLDOWN_MIN", 30)
 STORE_TRANSCRIPTS = _env_bool("STORE_TRANSCRIPTS", True)
 TRANSCRIPT_RETENTION_DAYS = _env_int("TRANSCRIPT_RETENTION_DAYS", 30)  # 0 keeps them until deleted
 PENDING_RETRY_LIMIT = _env_int("PENDING_RETRY_LIMIT", 10)
+# Seconds a request may spend retrying queued chunks, so a slow model can't hold it
+# past the phone's or the host's timeout. Ending or retrying a session gets the long
+# one; the catch-up after a good chunk, which the phone is waiting on, the short one.
+PENDING_RETRY_BUDGET_S = _env_int("PENDING_RETRY_BUDGET_S", 20, minimum=1)
+PENDING_INLINE_BUDGET_S = _env_int("PENDING_INLINE_BUDGET_S", 8, minimum=1)
 # A queued chunk the model answers but can't parse this many times is kept as a
 # plain reminder for review instead. Outages never count towards it.
 PENDING_MAX_ATTEMPTS = _env_int("PENDING_MAX_ATTEMPTS", 3, minimum=1)

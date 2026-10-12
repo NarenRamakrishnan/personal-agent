@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session
 
-from app import chunks, llm, parser, sessions, settings
+from app import chunks, config, llm, parser, sessions, settings
 from app.db import get_session
 from app.models import (
     ParsedReminder,
@@ -76,7 +76,7 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     remaining = chunks.pending_count(db, session_id)
     if remaining:
         try:  # best effort: this chunk is already saved, so a failure here must not become a 500
-            remaining = chunks.retry_pending(db, session_id, limit=2)
+            remaining = chunks.retry_pending(db, session_id, limit=2, budget_s=config.PENDING_INLINE_BUDGET_S)
         except Exception as e:  # noqa: BLE001
             logging.getLogger(__name__).warning("backlog retry skipped: %s", type(e).__name__)
             db.rollback()

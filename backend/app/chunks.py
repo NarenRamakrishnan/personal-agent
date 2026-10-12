@@ -10,6 +10,7 @@ commit, so a crash can't leave it parsed but still queued.
 
 import logging
 import re
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, or_, update
@@ -22,6 +23,7 @@ log = logging.getLogger(__name__)
 
 CLAIM_TTL = timedelta(minutes=2)  # a claim older than this is from a caller that died
 MAX_CONSECUTIVE_FAILURES = 2  # a retry pass stops after this many outages in a row
+MIN_CALL_S = 3  # with less time than this left, don't start another model call
 
 
 # Words that never make a commitment on their own. A chunk made only of these
@@ -127,7 +129,7 @@ def _count_failure(db: Session, chunk_id: str, session_id: str, text: str) -> No
     db.commit()
 
 
-def retry_pending(db: Session, session_id: str, limit: int | None = None) -> int:
+def retry_pending(db: Session, session_id: str, limit: int | None = None, budget_s: float | None = None) -> int:
     """Re-parse queued chunks oldest first.
 
     A chunk the model answers but can't parse is counted and skipped, so it never
@@ -136,6 +138,9 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None) -> int
     two in a row end the pass. A refused request counts only if another call in the
     same pass got an answer, so a bad config can't use up every chunk's attempts. A
     spent budget ends the pass at once.
+
+    budget_s: seconds the whole pass may take. Each call gets what's left, and the pass
+    stops when too little is left to start one; the rest wait for the next pass.
 
     Returns how many are still waiting.
     """
@@ -154,11 +159,19 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None) -> int
     outages = 0
     refused = []  # chunks whose request Nebius rejected: counted only if the config works
     config_ok = False  # some call this pass got a real answer, so the request is fine
+    started = time.monotonic()
     for chunk_id, text, captured_at, tz_name in todo:
+        left = None if budget_s is None else budget_s - (time.monotonic() - started)
+        if left is not None and left < MIN_CALL_S:
+            break  # out of time: the rest wait for the next pass
         if not _claim(db, chunk_id):
             continue  # someone else is on it
         try:
-            candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
+            if left is None:
+                candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
+            else:
+                with llm.time_limit(left):
+                    candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
             _save(db, candidates, remove_chunk_id=chunk_id)
             outages, config_ok = 0, True
         except llm.BudgetError as e:

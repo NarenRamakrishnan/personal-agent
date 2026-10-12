@@ -249,6 +249,9 @@ class LlmUsageRow(SQLModel, table=True):
     day: str = Field(primary_key=True)  # YYYY-MM-DD, UTC
     calls: int = 0
     tokens: int = 0
+    # The per-minute throttle, kept here so every server process shares one count.
+    minute: str | None = None  # HH:MM, UTC
+    minute_calls: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
 
 
 class SessionRow(SQLModel, table=True):
@@ -546,6 +549,9 @@ class Settings(ApiModel):
     # Limits the server sets, so the app can explain why a switch is greyed out.
     server_keeps_transcripts: bool
     server_retention_days: int
+    # Only in the reply to turning keepTranscripts off: queued chunks that still
+    # couldn't be parsed and were deleted with the rest of the words.
+    unparsed_chunks_deleted: int | None = None
 
 
 class SettingsUpdate(ApiModel):
