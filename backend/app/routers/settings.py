@@ -86,7 +86,7 @@ def _parse_queued_chunks(db: Session) -> int:
     ).all()
     left = 0
     for sid in session_ids:
-        budget = config.PENDING_RETRY_BUDGET_S - (time.monotonic() - started)
+        budget = config.REQUEST_BUDGET_S - (time.monotonic() - started)
         if budget < chunks.MIN_CALL_S:
             left += chunks.pending_count(db, sid)
             continue

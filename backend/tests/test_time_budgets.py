@@ -3,11 +3,14 @@ limit holds across server processes, and turning transcripts off doesn't lose ch
 
 from datetime import datetime, timedelta, timezone
 
+import types
+
 import pytest
 from sqlmodel import select
 
 from app import chunks, config, llm, parser, sessions, usage
 from app.db import make_engine
+from app.routers import parse as parse_router
 from app.models import PendingChunkRow, ReminderRow, utcnow
 
 from tests.test_privacy import Model, chunk, db_of
@@ -96,15 +99,16 @@ def capture_budgets(monkeypatch):
     return budgets
 
 
-def test_ending_and_retrying_a_session_use_the_long_budget(client, monkeypatch):
+def test_ending_and_retrying_a_session_fit_inside_the_phones_wait(client, monkeypatch):
     budgets = capture_budgets(monkeypatch)
     sid = client.post("/sessions").json()["id"]
     client.post(f"/sessions/{sid}/retry")
     client.post(f"/sessions/{sid}/end")
-    assert budgets == [config.PENDING_RETRY_BUDGET_S] * 2
+    assert budgets == [config.REQUEST_BUDGET_S] * 2
+    assert config.REQUEST_BUDGET_S < 15  # mobile/src/api/client.ts gives up at 15 s
 
 
-def test_the_catch_up_after_a_good_chunk_uses_the_short_budget(client, monkeypatch):
+def test_the_catch_up_after_a_good_chunk_gets_only_what_the_chunk_left(client, monkeypatch):
     m = Model()
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "chat_json", m)
@@ -114,7 +118,7 @@ def test_the_catch_up_after_a_good_chunk_uses_the_short_budget(client, monkeypat
     m.up = True
     budgets = capture_budgets(monkeypatch)
     chunk(client, sid, "buy eggs")
-    assert budgets == [config.PENDING_INLINE_BUDGET_S]
+    assert len(budgets) == 1 and 0 < budgets[0] <= config.REQUEST_BUDGET_S
 
 
 # ---- the per-minute limit is shared, not per process -------------------------
@@ -226,4 +230,60 @@ def test_the_phones_own_chunk_gets_one_time_limited_try(client, monkeypatch):
     monkeypatch.setattr(config, "PARSER_MODE", "nebius")
     monkeypatch.setattr(llm, "chat_json", chat)
     client.post("/sessions/parse", json={"text": "buy milk", "sessionId": "t"})
-    assert seen == [config.CHUNK_PARSE_TIMEOUT_S]
+    assert seen == [config.REQUEST_BUDGET_S]
+
+
+def test_a_slow_model_on_the_catch_up_cannot_push_the_request_past_the_budget(client, monkeypatch):
+    m = Model()
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", m)
+    sid = client.post("/sessions").json()["id"]
+    m.up = False
+    chunk(client, sid, "call mom")
+    m.up = True
+    clock = {"t": 0.0}
+    fake_time = types.SimpleNamespace(monotonic=lambda: clock["t"])
+    monkeypatch.setattr(chunks, "time", fake_time)
+    monkeypatch.setattr(parse_router, "time", fake_time)
+    real = m.__call__
+
+    def slow(messages, model=None):  # the chunk itself uses up all but 2 s
+        clock["t"] += config.REQUEST_BUDGET_S - 2
+        return real(messages, model)
+
+    monkeypatch.setattr(llm, "chat_json", slow)
+    budgets = capture_budgets(monkeypatch)
+    r = chunk(client, sid, "buy eggs")
+    assert r.status_code == 200 and r.json()["pendingChunks"] == 1  # no time left: it waits
+    assert budgets == [2]
+
+
+def _time_limits(monkeypatch, reply):
+    seen = []
+
+    def chat(messages, model=None):
+        seen.append(llm._time_limit.get())
+        return reply
+
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    monkeypatch.setattr(llm, "chat_json", chat)
+    return seen
+
+
+def test_typed_parse_is_time_limited_and_keeps_the_words_on_timeout(client, monkeypatch):
+    seen = _time_limits(monkeypatch, {"reminders": [{"title": "Buy milk", "triggerType": "time", "deadline": "2030-01-01T17:00:00Z"}]})
+    assert client.post("/parse", json={"text": "buy milk at 5"}).status_code == 200
+    assert seen == [config.REQUEST_BUDGET_S]
+
+    def timeout(messages, model=None):
+        raise llm.LLMError("timed out")
+
+    monkeypatch.setattr(llm, "chat_json", timeout)
+    r = client.post("/parse", json={"text": "buy milk at 5"})
+    assert r.status_code == 200 and "milk" in r.json()["title"].lower()
+
+
+def test_email_drafting_is_time_limited(client, monkeypatch):
+    seen = _time_limits(monkeypatch, {"email": {"to": None, "toName": "Alex", "subject": "Late", "body": "Running late."}})
+    client.post("/actions/email", json={"text": "email Alex that I'm late"})
+    assert seen == [config.REQUEST_BUDGET_S]

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
-from app import emailer, llm, settings
+from app import config, emailer, llm, settings
 from app.db import get_session
 from app.models import Action, ActionRow, EmailRequest, EmailUpdate, utcnow
 from app.parser import resolve_tz
@@ -23,7 +23,8 @@ def create_email_draft(body: EmailRequest, db: Session = Depends(get_session)):
     ever sent by the backend, and the phone must get an explicit approval first."""
     try:
         prefs = settings.load(db)
-        draft = emailer.make_draft(body.text, body.now or utcnow(), resolve_tz(settings.timezone_for(prefs, body.timezone)))
+        with llm.time_limit(config.REQUEST_BUDGET_S):
+            draft = emailer.make_draft(body.text, body.now or utcnow(), resolve_tz(settings.timezone_for(prefs, body.timezone)))
     except emailer.NoEmailRequest:
         raise HTTPException(status_code=422, detail="That doesn't look like a request to send an email")
     except llm.LLMError:

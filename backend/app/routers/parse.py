@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -36,7 +37,8 @@ def parse_text(body: ParseRequest, db: Session = Depends(get_session)):
     """
     prefs = settings.load(db)
     tz_name = settings.timezone_for(prefs, body.timezone)
-    candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", tz_name, times=prefs.times)
+    with llm.time_limit(config.REQUEST_BUDGET_S):  # past it, the words are kept to fix
+        candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", tz_name, times=prefs.times)
     if not candidates:
         raise HTTPException(status_code=422, detail="No reminder found in that text")
     first, rest = to_parsed(candidates[0]), [to_parsed(c) for c in candidates[1:]]
@@ -62,8 +64,9 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     # buffered chunk is captured_at and not the later moment it was sent.
     now = body.captured_at or body.now or utcnow()
     tz_name = settings.timezone_for(settings.load(db), body.timezone)
+    started = time.monotonic()
     try:
-        with llm.time_limit(config.CHUNK_PARSE_TIMEOUT_S):
+        with llm.time_limit(config.REQUEST_BUDGET_S):
             rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name)
     except llm.LLMError as e:
         # A refused request may be our config, not this chunk: don't count it yet.
@@ -78,7 +81,8 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     remaining = chunks.pending_count(db, session_id)
     if remaining:
         try:  # best effort: this chunk is already saved, so a failure here must not become a 500
-            remaining = chunks.retry_pending(db, session_id, limit=2, budget_s=config.PENDING_INLINE_BUDGET_S)
+            remaining = chunks.retry_pending(db, session_id, limit=2,
+                                             budget_s=config.REQUEST_BUDGET_S - (time.monotonic() - started))
         except Exception as e:  # noqa: BLE001
             logging.getLogger(__name__).warning("backlog retry skipped: %s", type(e).__name__)
             db.rollback()
