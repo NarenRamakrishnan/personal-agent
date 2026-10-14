@@ -10,7 +10,6 @@ limit. The per-minute throttle counts calls in the current clock minute.
 """
 
 import threading
-import weakref
 from datetime import datetime, timezone
 
 from sqlalchemy import or_, update
@@ -26,15 +25,12 @@ class BudgetExceeded(Exception):
 
 
 _lock = threading.Lock()
-# Engines whose tables exist. Weak, so a freed engine's id can't be mistaken for a new one.
-_ready: "weakref.WeakSet" = weakref.WeakSet()
 
 
 def _engine(eng):
+    # Not init_db every time: on Postgres it locks tables, and this runs mid-request.
     eng = eng or db.engine
-    if eng not in _ready:
-        db.init_db(eng)
-        _ready.add(eng)
+    db.ensure_initialized(eng)
     return eng
 
 

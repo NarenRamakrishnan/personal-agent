@@ -126,7 +126,9 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
     pending = db.exec(select(func.count()).select_from(PendingChunkRow).where(PendingChunkRow.session_id == row.id)).one()
     changed = db.exec(
         select(ReminderRow)
-        .where(ReminderRow.changed_in_session == row.id, ReminderRow.session_id != row.id)
+        # is_(None) too: in SQL a typed reminder's NULL session is never "!=" anything.
+        .where(ReminderRow.changed_in_session == row.id,
+               or_(ReminderRow.session_id.is_(None), ReminderRow.session_id != row.id))
         .order_by(ReminderRow.created_at, ReminderRow.id)
     )
     info = SessionInfo.model_validate(row.model_dump())

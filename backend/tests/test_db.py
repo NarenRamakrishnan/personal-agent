@@ -119,10 +119,35 @@ def test_init_db_adds_attempts_to_an_existing_pending_chunks_table():
     with eng.begin() as conn:  # the table as it was before `attempts` existed
         conn.execute(text(
             "CREATE TABLE pending_chunks (id VARCHAR PRIMARY KEY, session_id VARCHAR NOT NULL, text VARCHAR NOT NULL,"
-            " captured_at DATETIME NOT NULL, timezone VARCHAR, created_at DATETIME NOT NULL, claimed_at DATETIME)"))
+            " captured_at TIMESTAMP NOT NULL, timezone VARCHAR, created_at TIMESTAMP NOT NULL, claimed_at TIMESTAMP)"))
         conn.execute(text("INSERT INTO pending_chunks VALUES ('c1', 's', 'hi', '2026-10-01', NULL, '2026-10-01', NULL)"))
     init_db(eng)
     assert "attempts" in {c["name"] for c in inspect(eng).get_columns("pending_chunks")}
     with eng.connect() as conn:
         assert conn.execute(text("SELECT attempts FROM pending_chunks")).scalar() == 0
     init_db(eng)  # running it again is harmless
+
+
+def test_the_spend_guard_does_not_rerun_database_setup_after_startup(monkeypatch):
+    # On Postgres, setup locks tables; rerun from inside a request (the first model
+    # call after a start), it waited forever on that request's own open read.
+    from app import db, usage
+    from app.db import init_db, make_engine
+    eng = make_engine("sqlite://")
+    init_db(eng)  # what the server's startup does
+    runs = []
+    monkeypatch.setattr(db, "_init", lambda e: runs.append(e))
+    usage.reserve_call(eng)
+    usage.snapshot(eng)
+    assert runs == []
+    fresh = make_engine("sqlite://")
+    db.ensure_initialized(fresh)
+    db.ensure_initialized(fresh)
+    assert runs == [fresh]  # an engine nobody set up still gets set up, once
+
+
+def test_rls_is_only_turned_on_for_tables_that_lack_it():
+    from app.db import rls_statements
+    every = rls_statements()
+    assert rls_statements({"reminders"}) == [s for s in every if '"reminders"' not in s]
+    assert len(every) - len(rls_statements({"reminders"})) == 1

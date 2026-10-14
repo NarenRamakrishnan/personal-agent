@@ -1,3 +1,5 @@
+import threading
+import weakref
 from urllib.parse import urlsplit
 
 from sqlalchemy import inspect, text
@@ -62,8 +64,22 @@ def _add_missing_columns(eng) -> None:
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'))
 
 
-def rls_statements() -> list[str]:
-    return [f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY' for name in sorted(SQLModel.metadata.tables)]
+def rls_statements(already_on: set[str] = frozenset()) -> list[str]:
+    return [f'ALTER TABLE "{name}" ENABLE ROW LEVEL SECURITY'
+            for name in sorted(SQLModel.metadata.tables) if name not in already_on]
+
+
+def _tables_with_rls(conn) -> set[str]:
+    return set(conn.execute(text(
+        "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+        " WHERE n.nspname = current_schema() AND c.relrowsecurity"
+    )).scalars())
+
+
+# Engines init_db has already run on. Weak, so a freed engine's id can't be mistaken
+# for a new one.
+_initialized: "weakref.WeakSet" = weakref.WeakSet()
+_init_lock = threading.Lock()
 
 
 def init_db(eng=None) -> None:
@@ -72,6 +88,20 @@ def init_db(eng=None) -> None:
     import app.models  # noqa: F401
 
     eng = eng or engine
+    with _init_lock:
+        _init(eng)
+        _initialized.add(eng)
+
+
+def ensure_initialized(eng=None) -> None:
+    """init_db, unless it already ran on this engine. Safe to call from inside a request:
+    the server runs init_db at startup, so this never takes a lock there."""
+    eng = eng or engine
+    if eng not in _initialized:
+        init_db(eng)
+
+
+def _init(eng) -> None:
     SQLModel.metadata.create_all(eng)
     _add_missing_columns(eng)
     if eng.dialect.name == "postgresql":
@@ -80,8 +110,10 @@ def init_db(eng=None) -> None:
         # closes that. Our project already turns RLS on for new tables (its `ensure_rls`
         # event trigger), so this is a backstop for a Postgres without that trigger.
         # This backend connects as the tables' owner, which RLS doesn't restrict.
+        # Only tables still without it: ALTER TABLE locks the table, even as a no-op, and
+        # would wait behind every open transaction on it (a request mid-way, say).
         with eng.begin() as conn:
-            for statement in rls_statements():
+            for statement in rls_statements(_tables_with_rls(conn)):
                 conn.execute(text(statement))
 
 

@@ -159,6 +159,13 @@ def test_the_session_review_shows_what_it_changed_elsewhere(client, model):
     assert client.get("/sessions/s1").json()["changed"] == []
 
 
+def test_the_session_review_shows_a_typed_reminder_it_changed(client, model):
+    remember(client, "book", "Return library book")  # typed: no session
+    model.reply = {"reminders": [{"action": "complete", "ref": "r1"}]}
+    say(client, "I returned the library book", sid="s2")
+    assert [c["id"] for c in client.get("/sessions/s2").json()["changed"]] == ["book"]
+
+
 def test_a_completed_reminder_can_be_undone(client, model):
     remember(client, "milk", "Buy milk")
     model.reply = {"reminders": [{"action": "complete", "ref": "r1"}]}
@@ -172,7 +179,7 @@ def test_init_db_adds_changed_in_session_to_an_existing_reminders_table():
     eng = make_engine("sqlite://")
     with eng.begin() as conn:
         conn.execute(text("CREATE TABLE reminders (id VARCHAR PRIMARY KEY, title VARCHAR NOT NULL,"
-                          " created_at DATETIME NOT NULL, trigger_type VARCHAR NOT NULL)"))
+                          " created_at TIMESTAMP NOT NULL, trigger_type VARCHAR NOT NULL)"))
     init_db(eng)
     assert "changed_in_session" in {c["name"] for c in inspect(eng).get_columns("reminders")}
 
