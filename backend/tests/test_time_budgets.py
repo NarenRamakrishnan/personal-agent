@@ -76,7 +76,7 @@ class Recorder:
 
 def test_a_time_limit_reaches_the_nebius_client(monkeypatch):
     rec = Recorder()
-    monkeypatch.setattr(usage, "reserve_call", lambda: None)
+    monkeypatch.setattr(usage, "reserve_call", lambda **kw: None)
     monkeypatch.setattr(llm, "get_client", lambda: rec)
     with llm.time_limit(7), pytest.raises(llm.LLMError):
         llm.chat_json([{"role": "user", "content": "x"}])
@@ -91,9 +91,9 @@ def capture_budgets(monkeypatch):
     budgets = []
     real = chunks.retry_pending
 
-    def spy(db, session_id, limit=None, budget_s=None):
+    def spy(db, session_id, limit=None, budget_s=None, **kw):
         budgets.append(budget_s)
-        return real(db, session_id, limit=limit, budget_s=budget_s)
+        return real(db, session_id, limit=limit, budget_s=budget_s, **kw)
 
     monkeypatch.setattr(chunks, "retry_pending", spy)
     return budgets

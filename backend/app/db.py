@@ -52,7 +52,13 @@ ADDED_COLUMNS = [
     ("llm_usage", "minute", "VARCHAR"),
     ("llm_usage", "minute_calls", "INTEGER NOT NULL DEFAULT 0"),
     ("reminders", "changed_in_session", "VARCHAR"),
+    ("reminders", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
+    ("sessions", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
+    ("actions", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
+    ("pending_chunks", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
 ]
+# create_all only indexes the tables it creates, so an added indexed column needs its own.
+ADDED_INDEXES = [(t, "owner") for t in ("reminders", "sessions", "actions", "pending_chunks")]
 
 
 def _add_missing_columns(eng) -> None:
@@ -62,6 +68,24 @@ def _add_missing_columns(eng) -> None:
         for table, column, ddl in ADDED_COLUMNS:
             if table in tables and column not in {c["name"] for c in insp.get_columns(table)}:
                 conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'))
+        for table, column in ADDED_INDEXES:
+            conn.execute(text(f'CREATE INDEX IF NOT EXISTS "ix_{table}_{column}" ON "{table}" ("{column}")'))
+        if "saved_places" in tables and "owner" not in {c["name"] for c in insp.get_columns("saved_places")}:
+            _rekey_saved_places(conn)
+
+
+def _rekey_saved_places(conn) -> None:
+    """Saved places were keyed by name alone; now (owner, name), so each device has its
+    own "home". Neither database can change a primary key in place portably, so copy the
+    rows out, recreate the table and put them back under the shared owner."""
+    from app.models import SHARED_OWNER, SavedPlaceRow
+
+    rows = conn.execute(text("SELECT name, latitude, longitude, radius_meters FROM saved_places")).all()
+    conn.execute(text('DROP TABLE "saved_places"'))
+    SavedPlaceRow.__table__.create(conn)
+    for name, lat, lon, radius in rows:
+        conn.execute(SavedPlaceRow.__table__.insert().values(
+            owner=SHARED_OWNER, name=name, latitude=lat, longitude=lon, radius_meters=radius))
 
 
 def rls_statements(already_on: set[str] = frozenset()) -> list[str]:

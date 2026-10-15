@@ -13,10 +13,10 @@ import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, update
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app import settings
-from app.models import ActionRow, PendingChunkRow, ReminderRow, utcnow
+from app import config, settings
+from app.models import ActionRow, PendingChunkRow, ReminderRow, SettingsRow, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -25,16 +25,29 @@ _last_run: float | None = None
 
 
 def purge_expired(db: Session, now: datetime | None = None) -> dict:
-    days = settings.load(db).retention_days  # the stricter of the server's and the person's
-    if days <= 0:
-        return {"transcripts_erased": 0, "pending_deleted": 0}
-    cutoff = (now or utcnow()) - timedelta(days=days)
-    erased = 0
-    for model in (ReminderRow, ActionRow):
-        erased += db.execute(
-            update(model).where(model.created_at < cutoff, model.source_text.is_not(None)).values(source_text=None)
-        ).rowcount
-    pending = db.execute(delete(PendingChunkRow).where(PendingChunkRow.created_at < cutoff)).rowcount
+    """The server's limit applies to everyone; a person who chose fewer days gets theirs
+    on their own rows."""
+    now = now or utcnow()
+    plans = []  # (owner, or None for everyone; days)
+    server = config.TRANSCRIPT_RETENTION_DAYS
+    if server > 0:
+        plans.append((None, server))
+    for row in db.exec(select(SettingsRow).where(SettingsRow.delete_transcripts_after_days.is_not(None))):
+        days = settings.effective_retention(row.delete_transcripts_after_days)
+        if days > 0 and (server <= 0 or days < server):
+            plans.append((row.id, days))
+    erased = pending = 0
+    for owner, days in plans:
+        cutoff = now - timedelta(days=days)
+        for model in (ReminderRow, ActionRow):
+            query = update(model).where(model.created_at < cutoff, model.source_text.is_not(None))
+            if owner is not None:
+                query = query.where(model.owner == owner)
+            erased += db.execute(query.values(source_text=None)).rowcount
+        query = delete(PendingChunkRow).where(PendingChunkRow.created_at < cutoff)
+        if owner is not None:
+            query = query.where(PendingChunkRow.owner == owner)
+        pending += db.execute(query).rowcount
     db.commit()
     return {"transcripts_erased": erased, "pending_deleted": pending}
 

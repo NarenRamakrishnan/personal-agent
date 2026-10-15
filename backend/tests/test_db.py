@@ -39,14 +39,16 @@ def test_the_test_suite_never_points_at_a_real_database():
     assert db.engine.url.drivername == "sqlite"
 
 
-# ---- startup refuses an open server on a real database ---------------------
+# ---- a real database is never open ----------------------------------------
 
-def test_startup_refuses_a_real_database_without_an_api_key(monkeypatch):
-    from app import config, main
+def test_a_real_database_without_an_api_key_still_needs_credentials(client, monkeypatch):
+    # No startup refusal any more: device tokens are the way in, and nothing is open.
+    from app import config
     monkeypatch.setattr(config, "DATABASE_URL", "postgresql://u:p@h:5432/d")
     monkeypatch.setattr(config, "API_KEY", "")
-    with pytest.raises(RuntimeError, match="API_KEY"):
-        main.check_deploy_safety()
+    assert client.get("/reminders").status_code == 401
+    token = client.post("/devices").json()["token"]
+    assert client.get("/reminders", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
 
 def test_startup_allows_a_real_database_with_an_api_key(monkeypatch):
@@ -151,3 +153,28 @@ def test_rls_is_only_turned_on_for_tables_that_lack_it():
     every = rls_statements()
     assert rls_statements({"reminders"}) == [s for s in every if '"reminders"' not in s]
     assert len(every) - len(rls_statements({"reminders"})) == 1
+
+
+def test_init_db_gives_an_existing_database_owners_and_rekeys_saved_places():
+    from sqlalchemy import inspect, text
+    from sqlmodel import Session
+    from app.db import init_db, make_engine
+    from app.models import SavedPlaceRow
+    eng = make_engine("sqlite://")
+    with eng.begin() as conn:  # saved_places and reminders as they were before owners
+        conn.execute(text("CREATE TABLE saved_places (name VARCHAR PRIMARY KEY, latitude FLOAT NOT NULL,"
+                          " longitude FLOAT NOT NULL, radius_meters FLOAT NOT NULL)"))
+        conn.execute(text("INSERT INTO saved_places VALUES ('home', 1.0, 2.0, 150.0)"))
+        conn.execute(text("CREATE TABLE reminders (id VARCHAR PRIMARY KEY, title VARCHAR NOT NULL,"
+                          " created_at TIMESTAMP NOT NULL, trigger_type VARCHAR NOT NULL)"))
+        conn.execute(text("INSERT INTO reminders VALUES ('r1', 'Old', '2026-10-01', 'time')"))
+    init_db(eng)
+    insp = inspect(eng)
+    assert insp.get_pk_constraint("saved_places")["constrained_columns"] == ["owner", "name"]
+    assert "ix_reminders_owner" in {i["name"] for i in insp.get_indexes("reminders")}
+    with Session(eng) as db:
+        assert db.get(SavedPlaceRow, ("default", "home")).latitude == 1.0  # kept, as the shared owner's
+        db.add(SavedPlaceRow(owner="device-2", name="home", latitude=5, longitude=5))
+        db.commit()  # a second "home" for another device is allowed now
+        assert db.exec(text("SELECT owner FROM reminders")).one()[0] == "default"
+    init_db(eng)  # running it again is harmless

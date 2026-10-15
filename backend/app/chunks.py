@@ -17,7 +17,7 @@ from sqlalchemy import case, delete, or_, update
 from sqlmodel import Session, func, select
 
 from app import config, parser, sessions, settings
-from app.models import PendingChunkRow, Reminder, ReminderRow, readable, row_from_create, utcnow
+from app.models import SHARED_OWNER, PendingChunkRow, Reminder, ReminderRow, readable, row_from_create, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -46,12 +46,13 @@ def is_filler(text: str) -> bool:
 OPEN_REMINDERS_MAX = 15
 
 
-def open_reminders(db: Session, session_id: str) -> dict[str, Reminder]:
+def open_reminders(db: Session, session_id: str, owner: str = SHARED_OWNER) -> dict[str, Reminder]:
     """Open reminders keyed by a short ref (r1, r2...). The model only ever sees the
     refs, so a change it asks for can only reach a reminder listed here."""
     rows = db.exec(
         select(ReminderRow)
-        .where(ReminderRow.completed == False, ReminderRow.title != parser.UNREADABLE_TITLE)  # noqa: E712
+        .where(ReminderRow.owner == owner, ReminderRow.completed == False,  # noqa: E712
+               ReminderRow.title != parser.UNREADABLE_TITLE)
         # case, not a bare comparison: Postgres sorts NULL (typed reminders) first on DESC.
         .order_by(case((ReminderRow.session_id == session_id, 0), else_=1), ReminderRow.created_at.desc(), ReminderRow.id)
         .limit(OPEN_REMINDERS_MAX)
@@ -59,24 +60,25 @@ def open_reminders(db: Session, session_id: str) -> dict[str, Reminder]:
     return {f"r{i}": r for i, r in enumerate(readable(rows), 1)}
 
 
-def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> list:
+def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None,
+                     owner: str = SHARED_OWNER) -> list:
     """Parse and drop repeats. Writes nothing. Raises llm.LLMError if the model can't be used.
 
     Returns new reminders (ReminderCreate) and changes to open ones (parser.Change)."""
     if is_filler(text):
         return []
-    found = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db).times,
-                         open_reminders=open_reminders(db, session_id))
+    found = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db, owner).times,
+                         open_reminders=open_reminders(db, session_id, owner))
     changes = [c for c in found if isinstance(c, parser.Change)]
     candidates = [c for c in found if not isinstance(c, parser.Change)]
     for c in candidates:
         c.session_id = session_id  # never trust the parser to have set it
-    return sessions.drop_duplicates(db, session_id, candidates) + changes
+    return sessions.drop_duplicates(db, session_id, candidates, owner) + changes
 
 
-def _apply(db: Session, change: "parser.Change", session_id: str) -> ReminderRow | None:
+def _apply(db: Session, change: "parser.Change", session_id: str, owner: str = SHARED_OWNER) -> ReminderRow | None:
     row = db.get(ReminderRow, change.reminder_id)
-    if row is None or row.completed:
+    if row is None or row.owner != owner or row.completed:
         return None  # deleted or finished since the model saw it
     if change.action == "complete":
         row.completed = True
@@ -91,14 +93,14 @@ def _apply(db: Session, change: "parser.Change", session_id: str) -> ReminderRow
 
 
 def _save(db: Session, candidates: list, remove_chunk_id: str | None = None,
-          session_id: str | None = None) -> tuple[list[ReminderRow], list[ReminderRow]]:
+          session_id: str | None = None, owner: str = SHARED_OWNER) -> tuple[list[ReminderRow], list[ReminderRow]]:
     """New reminders and changes land in one commit with the chunk's removal.
     Returns (created, changed)."""
-    keep = settings.load(db).keep_transcripts
+    keep = settings.load(db, owner).keep_transcripts
     new = [c for c in candidates if not isinstance(c, parser.Change)]
-    rows = [row_from_create(c, keep_text=keep) for c in new]
+    rows = [row_from_create(c, keep_text=keep, owner=owner) for c in new]
     db.add_all(rows)
-    changed = [r for c in candidates if isinstance(c, parser.Change) if (r := _apply(db, c, session_id)) is not None]
+    changed = [r for c in candidates if isinstance(c, parser.Change) if (r := _apply(db, c, session_id, owner)) is not None]
     if remove_chunk_id:
         db.execute(delete(PendingChunkRow).where(PendingChunkRow.id == remove_chunk_id))
     db.commit()
@@ -107,25 +109,29 @@ def _save(db: Session, candidates: list, remove_chunk_id: str | None = None,
     return rows, changed
 
 
-def ingest(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None) -> tuple[list[ReminderRow], list[ReminderRow]]:
+def ingest(db: Session, session_id: str, text: str, now: datetime, tz_name: str | None,
+           owner: str = SHARED_OWNER) -> tuple[list[ReminderRow], list[ReminderRow]]:
     """Parse and save. Returns (created, changed). Raises llm.LLMError if the model can't be used."""
-    return _save(db, parse_candidates(db, session_id, text, now, tz_name), session_id=session_id)
+    return _save(db, parse_candidates(db, session_id, text, now, tz_name, owner), session_id=session_id, owner=owner)
 
 
-def queue(db: Session, session_id: str, text: str, captured_at: datetime, tz_name: str | None, attempts: int = 0) -> bool:
+def queue(db: Session, session_id: str, text: str, captured_at: datetime, tz_name: str | None, attempts: int = 0,
+          owner: str = SHARED_OWNER) -> bool:
     """Keep an unparsed chunk. Returns False if transcripts are not allowed to be stored.
 
     attempts: 1 when the model already answered unusably (llm.ReplyError), 0 for an outage.
     """
-    if not settings.load(db).keep_transcripts:
+    if not settings.load(db, owner).keep_transcripts:
         return False
-    db.add(PendingChunkRow(session_id=session_id, text=text, captured_at=captured_at, timezone=tz_name, attempts=attempts))
+    db.add(PendingChunkRow(session_id=session_id, text=text, captured_at=captured_at, timezone=tz_name,
+                           attempts=attempts, owner=owner))
     db.commit()
     return True
 
 
-def pending_count(db: Session, session_id: str) -> int:
-    return db.exec(select(func.count()).select_from(PendingChunkRow).where(PendingChunkRow.session_id == session_id)).one()
+def pending_count(db: Session, session_id: str, owner: str = SHARED_OWNER) -> int:
+    return db.exec(select(func.count()).select_from(PendingChunkRow).where(
+        PendingChunkRow.session_id == session_id, PendingChunkRow.owner == owner)).one()
 
 
 def _claim(db: Session, chunk_id: str) -> bool:
@@ -146,7 +152,7 @@ def _release(db: Session, chunk_id: str) -> None:
     db.commit()
 
 
-def _count_failure(db: Session, chunk_id: str, session_id: str, text: str) -> None:
+def _count_failure(db: Session, chunk_id: str, session_id: str, text: str, owner: str = SHARED_OWNER) -> None:
     """The model answered but couldn't parse this chunk. Count it, and at the limit stop
     retrying: keep it as a reminder with no deadline and a neutral title, so it lands in
     the review list for the person to fix or delete, instead of being dropped or
@@ -161,19 +167,21 @@ def _count_failure(db: Session, chunk_id: str, session_id: str, text: str) -> No
         # one reminder, two different unreadable chunks are two.
         already = db.exec(
             select(ReminderRow.id).where(
+                ReminderRow.owner == owner,
                 ReminderRow.session_id == session_id,
                 ReminderRow.title == parser.UNREADABLE_TITLE,
                 ReminderRow.source_text == text,
             )
         ).first()
-        _save(db, [] if already else parser.parse_unreadable(text, session_id), remove_chunk_id=chunk_id)
+        _save(db, [] if already else parser.parse_unreadable(text, session_id), remove_chunk_id=chunk_id, owner=owner)
         return
     row.attempts, row.claimed_at = row.attempts + 1, None
     db.add(row)
     db.commit()
 
 
-def retry_pending(db: Session, session_id: str, limit: int | None = None, budget_s: float | None = None) -> int:
+def retry_pending(db: Session, session_id: str, limit: int | None = None, budget_s: float | None = None,
+                  owner: str = SHARED_OWNER) -> int:
     """Re-parse queued chunks oldest first.
 
     A chunk the model answers but can't parse is counted and skipped, so it never
@@ -195,7 +203,7 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None, budget
         (c.id, c.text, c.captured_at, c.timezone)
         for c in db.exec(
             select(PendingChunkRow)
-            .where(PendingChunkRow.session_id == session_id)
+            .where(PendingChunkRow.session_id == session_id, PendingChunkRow.owner == owner)
             .order_by(PendingChunkRow.captured_at, PendingChunkRow.id)
             .limit(limit)
         )
@@ -212,11 +220,11 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None, budget
             continue  # someone else is on it
         try:
             if left is None:
-                candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
+                candidates = parse_candidates(db, session_id, text, captured_at, tz_name, owner)
             else:
                 with llm.time_limit(left):
-                    candidates = parse_candidates(db, session_id, text, captured_at, tz_name)
-            _save(db, candidates, remove_chunk_id=chunk_id, session_id=session_id)
+                    candidates = parse_candidates(db, session_id, text, captured_at, tz_name, owner)
+            _save(db, candidates, remove_chunk_id=chunk_id, session_id=session_id, owner=owner)
             outages, config_ok = 0, True
         except llm.BudgetError as e:
             log.warning("pending chunk retry stopped: %s", type(e).__name__)
@@ -234,7 +242,7 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None, budget
         except llm.ReplyError as e:
             # The model is up (it answered); this chunk is the problem. Move on.
             log.warning("pending chunk got an unusable reply: %s", type(e).__name__)
-            _count_failure(db, chunk_id, session_id, text)
+            _count_failure(db, chunk_id, session_id, text, owner)
             outages, config_ok = 0, True
         except llm.LLMError as e:
             log.warning("pending chunk retry failed: %s", type(e).__name__)
@@ -248,5 +256,5 @@ def retry_pending(db: Session, session_id: str, limit: int | None = None, budget
             break
     if config_ok:
         for chunk_id, text in refused:
-            _count_failure(db, chunk_id, session_id, text)
-    return pending_count(db, session_id)
+            _count_failure(db, chunk_id, session_id, text, owner)
+    return pending_count(db, session_id, owner)

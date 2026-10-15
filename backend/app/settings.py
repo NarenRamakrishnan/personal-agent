@@ -14,7 +14,6 @@ from sqlmodel import Session
 from app import config
 from app.models import QuietHours, Settings, SettingsRow, TimesOfDay
 
-ROW_ID = "default"
 
 
 @dataclass
@@ -46,8 +45,8 @@ def _hhmm(value: str) -> time:
     return time(int(h), int(m))
 
 
-def get_row(db: Session) -> SettingsRow:
-    return db.get(SettingsRow, ROW_ID) or SettingsRow(id=ROW_ID)
+def get_row(db: Session, owner: str) -> SettingsRow:
+    return db.get(SettingsRow, owner) or SettingsRow(id=owner)  # one row per owner
 
 
 def effective_retention(user_days: int | None) -> int:
@@ -56,8 +55,8 @@ def effective_retention(user_days: int | None) -> int:
     return min(candidates) if candidates else 0
 
 
-def load(db: Session) -> Prefs:
-    row = get_row(db)
+def load(db: Session, owner: str) -> Prefs:
+    row = get_row(db, owner)
     threshold, cooldown = notify_levels().get(row.notify_level, notify_levels()["normal"])
     return Prefs(
         timezone_mode=row.timezone_mode,

@@ -17,6 +17,7 @@ from app.models import (
     ReminderRow,
     SessionDetail,
     SessionInfo,
+    SHARED_OWNER,
     SessionRow,
     readable,
     utcnow,
@@ -25,6 +26,10 @@ from app.models import (
 
 class SessionEnded(Exception):
     """A chunk arrived for a session that has already ended."""
+
+
+class NotYours(Exception):
+    """The session id belongs to another device. Treated as not found, never shown."""
 
 
 def _now() -> datetime:  # a function so tests can move the clock
@@ -54,25 +59,30 @@ def refresh(db: Session, row: SessionRow) -> SessionRow:
     return row
 
 
-def start(db: Session, session_id: str) -> SessionRow:
+def start(db: Session, session_id: str, owner: str = SHARED_OWNER) -> SessionRow:
     row = db.get(SessionRow, session_id)
+    if row is not None and row.owner != owner:
+        raise NotYours(session_id)
     if row is None:
         now = _now()
-        db.add(SessionRow(id=session_id, started_at=now, last_activity_at=now))
+        db.add(SessionRow(id=session_id, started_at=now, last_activity_at=now, owner=owner))
         try:
             db.commit()
         except IntegrityError:
             # Another request started this same session a moment earlier: use theirs.
             db.rollback()
-            return refresh(db, db.get(SessionRow, session_id))
+            row = db.get(SessionRow, session_id)
+            if row.owner != owner:
+                raise NotYours(session_id)
+            return refresh(db, row)
         row = db.get(SessionRow, session_id)
         retention.maybe_purge(db)  # hourly at most; a long-running server never restarts
     return refresh(db, row)
 
 
-def touch(db: Session, session_id: str) -> SessionRow:
+def touch(db: Session, session_id: str, owner: str = SHARED_OWNER) -> SessionRow:
     """Register a chunk. Starts the session if new, refuses if it already ended."""
-    row = start(db, session_id)
+    row = start(db, session_id, owner)
     if row.status == "ended":
         raise SessionEnded(row.end_reason or "ended")
     row.last_activity_at = _now()
@@ -82,7 +92,8 @@ def touch(db: Session, session_id: str) -> SessionRow:
     return row
 
 
-def accept_chunk(db: Session, session_id: str, captured_at: datetime | None = None) -> SessionRow:
+def accept_chunk(db: Session, session_id: str, captured_at: datetime | None = None,
+                 owner: str = SHARED_OWNER) -> SessionRow:
     """Register a chunk, or accept a late one that was spoken while the session was live.
 
     A phone that lost signal sends its buffered chunks later. If the chunk says
@@ -91,7 +102,7 @@ def accept_chunk(db: Session, session_id: str, captured_at: datetime | None = No
     session or change its state.
     """
     try:
-        return touch(db, session_id)
+        return touch(db, session_id, owner)
     except SessionEnded:
         row = db.get(SessionRow, session_id)
         slack = timedelta(seconds=config.LATE_CHUNK_TOLERANCE_S)
@@ -117,17 +128,20 @@ def end(db: Session, row: SessionRow) -> SessionRow:
 def detail(db: Session, row: SessionRow) -> SessionDetail:
     reminders = db.exec(
         select(ReminderRow)
-        .where(ReminderRow.session_id == row.id)
+        # owner too: a typed reminder can name any session id, even another device's.
+        .where(ReminderRow.session_id == row.id, ReminderRow.owner == row.owner)
         .order_by(ReminderRow.created_at, ReminderRow.id)
     )
     actions = db.exec(
-        select(ActionRow).where(ActionRow.session_id == row.id).order_by(ActionRow.created_at, ActionRow.id)
+        select(ActionRow).where(ActionRow.session_id == row.id, ActionRow.owner == row.owner)
+        .order_by(ActionRow.created_at, ActionRow.id)
     )
-    pending = db.exec(select(func.count()).select_from(PendingChunkRow).where(PendingChunkRow.session_id == row.id)).one()
+    pending = db.exec(select(func.count()).select_from(PendingChunkRow).where(
+        PendingChunkRow.session_id == row.id, PendingChunkRow.owner == row.owner)).one()
     changed = db.exec(
         select(ReminderRow)
         # is_(None) too: in SQL a typed reminder's NULL session is never "!=" anything.
-        .where(ReminderRow.changed_in_session == row.id,
+        .where(ReminderRow.changed_in_session == row.id, ReminderRow.owner == row.owner,
                or_(ReminderRow.session_id.is_(None), ReminderRow.session_id != row.id))
         .order_by(ReminderRow.created_at, ReminderRow.id)
     )
@@ -161,7 +175,7 @@ def _same_deadline(a, b) -> bool:
     return abs(a - b) <= DUPLICATE_DEADLINE_WINDOW
 
 
-def drop_duplicates(db: Session, session_id: str, candidates: list) -> list:
+def drop_duplicates(db: Session, session_id: str, candidates: list, owner: str = SHARED_OWNER) -> list:
     """Remove candidates that repeat a reminder already saved in this session, or one
     from an earlier session that is still open.
 
@@ -174,7 +188,8 @@ def drop_duplicates(db: Session, session_id: str, candidates: list) -> list:
         (_identity(r.title, r.location), r.deadline)
         for r in db.exec(
             select(ReminderRow).where(
-                or_(ReminderRow.session_id == session_id, ReminderRow.completed == False)  # noqa: E712
+                ReminderRow.owner == owner,
+                or_(ReminderRow.session_id == session_id, ReminderRow.completed == False),  # noqa: E712
             )
         )
     ]

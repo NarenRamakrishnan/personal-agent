@@ -51,6 +51,19 @@ def time_limit(seconds: float):
         _time_limit.reset(token)
 
 
+_owner: ContextVar[str | None] = ContextVar("llm_owner", default=None)
+
+
+@contextmanager
+def charged_to(owner: str):
+    """Calls inside this block count against this device's daily limit too."""
+    token = _owner.set(owner)
+    try:
+        yield
+    finally:
+        _owner.reset(token)
+
+
 def get_client() -> OpenAI:
     global _client
     if _client is None:
@@ -79,7 +92,7 @@ def extract_json(text: str) -> dict:
 
 def chat_json(messages: list[dict], model: str | None = None) -> dict:
     try:
-        usage.reserve_call()
+        usage.reserve_call(owner=_owner.get())
     except usage.BudgetExceeded as e:
         raise BudgetError(str(e)) from e
     except Exception as e:  # noqa: BLE001

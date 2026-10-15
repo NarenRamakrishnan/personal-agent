@@ -15,9 +15,9 @@ from app.models import (
     ReminderCreate,
     utcnow,
 )
-from app.security import require_api_key
+from app.security import current_owner
 
-router = APIRouter(tags=["parse"], dependencies=[Depends(require_api_key)])
+router = APIRouter(tags=["parse"])
 
 
 def to_parsed(c: ReminderCreate) -> ParsedReminder:
@@ -30,14 +30,14 @@ def to_parsed(c: ReminderCreate) -> ParsedReminder:
 
 
 @router.post("/parse", response_model=ParsedReminderResponse, response_model_exclude_none=True)
-def parse_text(body: ParseRequest, db: Session = Depends(get_session)):
+def parse_text(body: ParseRequest, db: Session = Depends(get_session), owner: str = Depends(current_owner)):
     """Typed or confirmed input: parse one reminder and save nothing.
 
     The phone shows its confirm screen and then POSTs /reminders.
     """
-    prefs = settings.load(db)
+    prefs = settings.load(db, owner)
     tz_name = settings.timezone_for(prefs, body.timezone)
-    with llm.time_limit(config.REQUEST_BUDGET_S):  # past it, the words are kept to fix
+    with llm.time_limit(config.REQUEST_BUDGET_S), llm.charged_to(owner):  # past it, the words are kept to fix
         candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", tz_name, times=prefs.times)
     if not candidates:
         raise HTTPException(status_code=422, detail="No reminder found in that text")
@@ -46,7 +46,8 @@ def parse_text(body: ParseRequest, db: Session = Depends(get_session)):
 
 
 @router.post("/sessions/parse", response_model=ParseResponse, response_model_exclude_none=True)
-def parse_into_session(body: ParseRequest, response: Response, db: Session = Depends(get_session)):
+def parse_into_session(body: ParseRequest, response: Response, db: Session = Depends(get_session),
+                       owner: str = Depends(current_owner)):
     """Always-listening input: parse every commitment in the text and save them
     under a session, ready for the end-of-session review list.
 
@@ -55,7 +56,9 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     """
     session_id = body.session_id or str(uuid.uuid4())
     try:
-        sessions.accept_chunk(db, session_id, body.captured_at)
+        sessions.accept_chunk(db, session_id, body.captured_at, owner)
+    except sessions.NotYours:
+        raise HTTPException(status_code=404, detail="Session not found")
     except sessions.SessionEnded as e:
         raise HTTPException(
             status_code=409, detail=f"Session already ended ({e}). Start a new session."
@@ -63,26 +66,27 @@ def parse_into_session(body: ParseRequest, response: Response, db: Session = Dep
     # Relative words ("tonight") resolve against when the speech happened, which for a
     # buffered chunk is captured_at and not the later moment it was sent.
     now = body.captured_at or body.now or utcnow()
-    tz_name = settings.timezone_for(settings.load(db), body.timezone)
+    tz_name = settings.timezone_for(settings.load(db, owner), body.timezone)
     started = time.monotonic()
     try:
-        with llm.time_limit(config.REQUEST_BUDGET_S):
-            rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name)
+        with llm.time_limit(config.REQUEST_BUDGET_S), llm.charged_to(owner):
+            rows, changed = chunks.ingest(db, session_id, body.text, now, tz_name, owner)
     except llm.LLMError as e:
         # A refused request may be our config, not this chunk: don't count it yet.
         attempts = 1 if isinstance(e, llm.ReplyError) and not isinstance(e, llm.RequestRefused) else 0
-        if not chunks.queue(db, session_id, body.text, now, tz_name, attempts=attempts):
+        if not chunks.queue(db, session_id, body.text, now, tz_name, attempts=attempts, owner=owner):
             # Transcripts may not be stored, so there is nowhere safe to keep it.
             raise HTTPException(status_code=503, detail="Parsing is temporarily unavailable")
         response.status_code = 202
-        return ParseResponse(session_id=session_id, reminders=[], pending_chunks=chunks.pending_count(db, session_id))
+        return ParseResponse(session_id=session_id, reminders=[], pending_chunks=chunks.pending_count(db, session_id, owner))
     saved = [r.to_api() for r in rows]  # before the retry's commit expires these row objects
     changed_api = [r.to_api() for r in changed]
-    remaining = chunks.pending_count(db, session_id)
+    remaining = chunks.pending_count(db, session_id, owner)
     if remaining:
         try:  # best effort: this chunk is already saved, so a failure here must not become a 500
-            remaining = chunks.retry_pending(db, session_id, limit=2,
-                                             budget_s=config.REQUEST_BUDGET_S - (time.monotonic() - started))
+            with llm.charged_to(owner):
+                remaining = chunks.retry_pending(db, session_id, limit=2, owner=owner,
+                                                 budget_s=config.REQUEST_BUDGET_S - (time.monotonic() - started))
         except Exception as e:  # noqa: BLE001
             logging.getLogger(__name__).warning("backlog retry skipped: %s", type(e).__name__)
             db.rollback()

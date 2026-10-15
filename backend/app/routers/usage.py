@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 
 from app import usage
-from app.security import require_api_key
+from app.security import current_owner
 
-router = APIRouter(tags=["usage"], dependencies=[Depends(require_api_key)])
+router = APIRouter(tags=["usage"], dependencies=[Depends(current_owner)])
 
 
 @router.get("/usage")

@@ -250,7 +250,7 @@ class FakeClient:
 
 def call_with(monkeypatch, result):
     from app import usage
-    monkeypatch.setattr(usage, "reserve_call", lambda: None)
+    monkeypatch.setattr(usage, "reserve_call", lambda **kw: None)
     monkeypatch.setattr(llm, "get_client", lambda: FakeClient(result))
     return llm.chat_json([{"role": "user", "content": "x"}])
 

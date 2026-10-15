@@ -1,0 +1,8 @@
+# Never upload secrets, local databases or dev-only files.
+.env
+.env.*
+*.db
+.venv
+tests
+__pycache__
+.pytest_cache

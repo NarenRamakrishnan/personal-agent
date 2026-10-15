@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app import config, db
-from app.models import LlmUsageRow
+from app.models import SHARED_OWNER, DeviceUsageRow, LlmUsageRow
 
 
 class BudgetExceeded(Exception):
@@ -108,10 +108,39 @@ def _reserve_in_db(eng) -> None:
             raise BudgetExceeded("too many model calls this minute")
 
 
-def reserve_call(eng=None) -> None:
-    """Check every limit, then count this call. Raises BudgetExceeded to refuse it."""
+def _reserve_for_device(eng, owner: str, step: int) -> bool:
+    """Count (step=1) or uncount (step=-1) one call for a device. False if it's at its limit."""
+    day = today()
+    with Session(_engine(eng)) as s:
+        if s.get(DeviceUsageRow, (owner, day)) is None:
+            try:
+                s.add(DeviceUsageRow(owner=owner, day=day))
+                s.commit()
+            except IntegrityError:  # its other request made today's row first
+                s.rollback()
+        query = update(DeviceUsageRow).where(DeviceUsageRow.owner == owner, DeviceUsageRow.day == day)
+        if step > 0:
+            query = query.where(DeviceUsageRow.calls < config.DEVICE_DAILY_CALL_LIMIT)
+        counted = s.execute(query.values(calls=DeviceUsageRow.calls + step)).rowcount
+        s.commit()
+        return bool(counted)
+
+
+def reserve_call(eng=None, owner: str | None = None) -> None:
+    """Check every limit, then count this call. Raises BudgetExceeded to refuse it.
+
+    owner: the device making the call. A device also has its own daily limit, so one
+    phone can't use up the whole day; the shared key and local use don't."""
+    per_device = owner is not None and owner != SHARED_OWNER and config.DEVICE_DAILY_CALL_LIMIT > 0
     with _lock:
-        _reserve_in_db(eng)
+        if per_device and not _reserve_for_device(eng, owner, 1):
+            raise BudgetExceeded("this device's daily model call limit reached")
+        try:
+            _reserve_in_db(eng)
+        except BudgetExceeded:
+            if per_device:
+                _reserve_for_device(eng, owner, -1)  # refused overall: don't charge the device
+            raise
 
 
 def record_tokens(tokens: int, eng=None) -> None:

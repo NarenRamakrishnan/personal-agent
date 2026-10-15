@@ -149,6 +149,8 @@ class ReminderRow(SQLModel, table=True):
     __tablename__ = "reminders"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    # Whose row this is: a device's id, or SHARED_OWNER for the shared API key.
+    owner: str = Field(default="default", index=True, sa_column_kwargs={"server_default": "default"})
     title: str
     description: str | None = None
     created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
@@ -260,6 +262,36 @@ class ParsedReminderResponse(ParsedReminder):
     additional: list[ParsedReminder] | None = None
 
 
+SHARED_OWNER = "default"  # rows made with the shared API key, or locally with no key
+
+
+class DeviceRow(SQLModel, table=True):
+    """A phone that asked for its own token. Only the token's SHA-256 is kept, so a
+    leaked database can't be used to act as any device."""
+
+    __tablename__ = "devices"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    token_hash: str = Field(index=True, unique=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False, index=True))
+    revoked: bool = False
+
+
+class DeviceUsageRow(SQLModel, table=True):
+    """Model calls one device made in one UTC day, so one device can't use up the day."""
+
+    __tablename__ = "device_usage"
+
+    owner: str = Field(primary_key=True)
+    day: str = Field(primary_key=True)  # YYYY-MM-DD, UTC
+    calls: int = 0
+
+
+class DeviceToken(ApiModel):
+    device_id: str
+    token: str  # shown once; send it as "Authorization: Bearer <token>"
+
+
 class LlmUsageRow(SQLModel, table=True):
     """One row per UTC day: how much model usage the backend has spent."""
 
@@ -279,6 +311,8 @@ class SessionRow(SQLModel, table=True):
     __tablename__ = "sessions"
 
     id: str = Field(primary_key=True)
+    # Whose row this is: a device's id, or SHARED_OWNER for the shared API key.
+    owner: str = Field(default="default", index=True, sa_column_kwargs={"server_default": "default"})
     status: str = "listening"  # listening | ended
     started_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
     last_activity_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
@@ -313,6 +347,8 @@ class SavedPlaceRow(SQLModel, table=True):
 
     __tablename__ = "saved_places"
 
+    # Each device has its own "home": the key is (owner, name).
+    owner: str = Field(default="default", primary_key=True)
     name: str = Field(primary_key=True)  # lower-case, alias-folded
     latitude: float
     longitude: float
@@ -389,6 +425,8 @@ class ActionRow(SQLModel, table=True):
     __tablename__ = "actions"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    # Whose row this is: a device's id, or SHARED_OWNER for the shared API key.
+    owner: str = Field(default="default", index=True, sa_column_kwargs={"server_default": "default"})
     type: str = "email"
     status: str = "needs_approval"
     session_id: str | None = Field(default=None, index=True)
@@ -428,7 +466,7 @@ class EmailUpdate(ApiModel):
     body: str | None = Field(default=None, min_length=1, max_length=10000)
 
 
-def row_from_create(body: "ReminderCreate", keep_text: bool | None = None) -> "ReminderRow":
+def row_from_create(body: "ReminderCreate", keep_text: bool | None = None, owner: str = "default") -> "ReminderRow":
     """keep_text: whether the words may be stored (settings.load(db).keep_transcripts).
     Left out, it falls back to the server switch alone."""
     from app import config  # local import: config has no model deps, this keeps import order simple
@@ -437,7 +475,7 @@ def row_from_create(body: "ReminderCreate", keep_text: bool | None = None) -> "R
     data["location"] = body.location.model_dump(exclude_none=True) if body.location else None
     if not (config.STORE_TRANSCRIPTS if keep_text is None else keep_text):
         data["source_text"] = None
-    row = ReminderRow(**data)
+    row = ReminderRow(**data, owner=owner)
     if body.id:
         row.id = body.id
     if body.created_at:
@@ -451,6 +489,8 @@ class PendingChunkRow(SQLModel, table=True):
     __tablename__ = "pending_chunks"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    # Whose row this is: a device's id, or SHARED_OWNER for the shared API key.
+    owner: str = Field(default="default", index=True, sa_column_kwargs={"server_default": "default"})
     session_id: str = Field(index=True)
     text: str
     captured_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
@@ -515,7 +555,7 @@ def check_timezone(value: str | None) -> str | None:
 class SettingsRow(SQLModel, table=True):
     __tablename__ = "settings"
 
-    id: str = Field(default="default", primary_key=True)
+    id: str = Field(default="default", primary_key=True)  # the owner: one row each
     timezone_mode: str = "auto"
     timezone: str | None = None
     quiet_start: str | None = None

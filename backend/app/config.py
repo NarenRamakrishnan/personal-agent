@@ -63,6 +63,13 @@ API_KEY = os.getenv("API_KEY", "")
 LLM_DAILY_CALL_LIMIT = _env_int("LLM_DAILY_CALL_LIMIT", 400)
 LLM_DAILY_TOKEN_LIMIT = _env_int("LLM_DAILY_TOKEN_LIMIT", 400000)
 LLM_CALLS_PER_MINUTE = _env_int("LLM_CALLS_PER_MINUTE", 60)
+# Per device (POST /devices): model calls one phone may make in a UTC day, so no single
+# device can use up the daily limit above, and new devices allowed per hour across
+# everyone, so minting devices can't get around that.
+DEVICE_DAILY_CALL_LIMIT = _env_int("DEVICE_DAILY_CALL_LIMIT", 100)
+DEVICE_SIGNUPS_PER_HOUR = _env_int("DEVICE_SIGNUPS_PER_HOUR", 30)
+# Vercel Cron sends "Authorization: Bearer <CRON_SECRET>" to /cron/keep-alive.
+CRON_SECRET = os.getenv("CRON_SECRET", "")
 
 
 # Listening sessions (Module 04). A session ends when the app says so, after this

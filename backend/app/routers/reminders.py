@@ -6,32 +6,32 @@ from sqlmodel import Session, select
 from app import settings
 from app.db import get_session
 from app.models import Reminder, ReminderCreate, ReminderRow, ReminderUpdate, readable, row_from_create
-from app.security import require_api_key
+from app.security import current_owner
 
-router = APIRouter(prefix="/reminders", tags=["reminders"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/reminders", tags=["reminders"])
 
 
-def get_or_404(db: Session, reminder_id: str) -> ReminderRow:
+def get_or_404(db: Session, reminder_id: str, owner: str) -> ReminderRow:
     row = db.get(ReminderRow, reminder_id)
-    if row is None:
+    if row is None or row.owner != owner:  # another device's reminder looks like none
         raise HTTPException(status_code=404, detail="Reminder not found")
     return row
 
 
 @router.post("", response_model=Reminder, response_model_exclude_none=True, status_code=201)
-def create_reminder(body: ReminderCreate, response: Response, db: Session = Depends(get_session)):
+def create_reminder(body: ReminderCreate, response: Response, db: Session = Depends(get_session), owner: str = Depends(current_owner)):
     if body.id:
         existing = db.get(ReminderRow, body.id)
         if existing:
             # The phone supplies its own id, so a retry after a lost response is
             # the same reminder arriving twice: answer it, don't fail it.
-            if (existing.title, existing.trigger_type, existing.deadline) == (
+            if existing.owner == owner and (existing.title, existing.trigger_type, existing.deadline) == (
                 body.title, body.trigger_type, body.deadline
             ):
                 response.status_code = 200
                 return existing.to_api()
             raise HTTPException(status_code=409, detail="A different reminder has this id")
-    row = row_from_create(body, keep_text=settings.load(db).keep_transcripts)
+    row = row_from_create(body, keep_text=settings.load(db, owner).keep_transcripts, owner=owner)
     db.add(row)
     try:
         db.commit()
@@ -48,16 +48,17 @@ def list_reminders(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_session),
+    owner: str = Depends(current_owner),
 ):
-    query = select(ReminderRow).order_by(ReminderRow.created_at.desc(), ReminderRow.id)
+    query = select(ReminderRow).where(ReminderRow.owner == owner).order_by(ReminderRow.created_at.desc(), ReminderRow.id)
     if session_id:
         query = query.where(ReminderRow.session_id == session_id)
     return readable(db.exec(query.offset(offset).limit(limit)))
 
 
 @router.patch("/{reminder_id}", response_model=Reminder, response_model_exclude_none=True)
-def update_reminder(reminder_id: str, body: ReminderUpdate, db: Session = Depends(get_session)):
-    row = get_or_404(db, reminder_id)
+def update_reminder(reminder_id: str, body: ReminderUpdate, db: Session = Depends(get_session), owner: str = Depends(current_owner)):
+    row = get_or_404(db, reminder_id, owner)
     # exclude_unset: an explicit null clears an optional field (e.g. snoozedUntil),
     # an omitted field is left alone. Required fields can't be nulled.
     changes = body.model_dump(exclude_unset=True)
@@ -82,7 +83,7 @@ def update_reminder(reminder_id: str, body: ReminderUpdate, db: Session = Depend
 
 
 @router.delete("/{reminder_id}", status_code=204)
-def delete_reminder(reminder_id: str, db: Session = Depends(get_session)):
-    db.delete(get_or_404(db, reminder_id))
+def delete_reminder(reminder_id: str, db: Session = Depends(get_session), owner: str = Depends(current_owner)):
+    db.delete(get_or_404(db, reminder_id, owner))
     db.commit()
     return Response(status_code=204)
