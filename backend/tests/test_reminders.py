@@ -28,6 +28,11 @@ def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_root_sends_visitors_to_the_docs(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"] == "/docs"
+
+
 def test_mobile_reminder_round_trips_with_client_id(client):
     r = client.post("/reminders", json=MOBILE_MOCK_1)
     assert r.status_code == 201

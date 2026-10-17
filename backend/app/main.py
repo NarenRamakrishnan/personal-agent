@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
@@ -38,7 +38,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Commitment Tracker API", lifespan=lifespan)
+app = FastAPI(title="Heedly API", lifespan=lifespan)
 
 # Expo web runs on another origin in dev. Native apps don't need CORS at all.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -74,6 +74,12 @@ app.include_router(sessions.router)
 app.include_router(usage.router)
 app.include_router(privacy.router)
 app.include_router(settings.router)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """The README links the bare URL; send visitors to the API docs, not a 404."""
+    return RedirectResponse("/docs")
 
 
 @app.get("/health")
