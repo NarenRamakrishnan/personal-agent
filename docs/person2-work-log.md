@@ -332,3 +332,17 @@ Follow the runbook before calling the plan's full real-device milestone complete
    HTTP suite: five passed. No production devices, reminders or paid model calls created.
 6. Commit scope: device-auth/storage services, API wiring, secure-store dependency/plugin,
    associated tests, isolated harness and this documentation.
+
+## 17 — Places contract alignment and named destinations
+
+1. Removed the mobile school-to-university mapping to match the latest backend:
+   personal school/campus reminders use saved places, not any nearby school.
+2. Expanded bounded Overpass queries to named/brand locations and all shop tags;
+   preserve named places without canonical categories so UPS/copyshops and similar
+   destinations can reach the backend's name matcher. Kept 500 m radius, provider
+   timeout, 1000-element response limit, nearest-100 result cap and short cache.
+3. Re-sort cached distances after movement. Added taxonomy/named-place/query/cache
+   regressions and real HTTP UPS name-matching coverage.
+4. Checks: mobile tests, TypeScript and isolated authenticated HTTP integration.
+   Actual provider coverage remains dependent on OSM data; no claim every store exists.
+5. Commit scope: Places mapping/query, regressions and this step record.

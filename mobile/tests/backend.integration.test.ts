@@ -25,6 +25,7 @@ describe.skipIf(process.env.PERSON2_ISOLATED_DB !== "true")("mobile client → u
     const context = { now: new Date().toISOString(), timezone: "America/Los_Angeles", latitude: 47, longitude: -122, nearbyPlaces: [] };
     expect((await contextApi.evaluate({ ...base, location: { type: "saved_place", name: "home" } }, context)).notify).toBe(true);
     expect((await contextApi.evaluate({ ...base, location: { type: "category", category: "grocery_store" } }, { ...context, nearbyPlaces: [{ name: "Safeway", types: ["grocery_store"], distanceMeters: 43 }] })).notify).toBe(true);
+    expect((await contextApi.evaluate({ ...base, location: { type: "place", name: "UPS" } }, { ...context, nearbyPlaces: [{ name: "The UPS Store", types: [], distanceMeters: 43 }] })).notify).toBe(true);
     await contextApi.deletePlace(home.name); expect(await contextApi.savedPlaces()).toEqual([]);
   });
   it("drafts, edits, approves and cancels without sending mail", async () => {

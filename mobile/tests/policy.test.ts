@@ -19,6 +19,10 @@ describe("notification policy", () => {
   });
 });
 describe("provider/backend taxonomy boundary", () => {
+  it("does not turn schools/campus into generic university matches", () => { expect(osmCategories({ amenity: "school" })).not.toContain("university"); });
+  it("preserves named UPS and brand-only locations without inventing categories", () => {
+    expect(mapPlaces([{ id: 1, lat: 47, lon: -122, tags: { name: "The UPS Store", shop: "copyshop" } }, { id: 2, lat: 47, lon: -122, tags: { brand: "Target" } }], 47, -122)).toMatchObject([{ name: "The UPS Store", types: [] }, { name: "Target", types: [] }]);
+  });
   it.each([[{ shop: "supermarket" }, "grocery_store"], [{ amenity: "pharmacy" }, "pharmacy"], [{ leisure: "fitness_centre" }, "gym"], [{ amenity: "fast_food" }, "restaurant"], [{ amenity: "cafe" }, "coffee_shop"], [{ amenity: "college" }, "university"], [{ shop: "mall" }, "shopping"]])("maps %j to %s", (tags, category) => expect(osmCategories(tags as Record<string, string>)).toContain(category));
   it("measures distance and rejects objects without coordinates", () => {
     expect(distanceMeters(47, -122, 47, -122)).toBe(0);
