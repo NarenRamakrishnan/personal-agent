@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "check:native-config": "node scripts/check-native-config.mjs",
     "test": "vitest run",
-    "test:backend": "node scripts/backend-smoke.mjs"
+    "test:backend": "node scripts/backend-smoke.mjs",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "preview:isolated": "node scripts/browser-smoke.mjs --preview"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -38,6 +40,7 @@
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/react": "~19.1.10",
     "@types/react-test-renderer": "^19.3.0",
     "react-test-renderer": "^19.1.0",

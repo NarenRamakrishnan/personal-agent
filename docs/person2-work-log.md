@@ -445,3 +445,21 @@ Follow the runbook before calling the plan's full real-device milestone complete
    No production writes, new hosted CI run, branch push or merge were performed.
 6. Commit scope: final documentation/evidence only. Implementation remains in the
    seven separate tested commits for steps 16–22 on `person2/reliability-integration`.
+
+## 24 — Phone-free connected browser acceptance
+
+1. Added Playwright/Chromium click-through tests with a temporary authenticated backend,
+   fresh SQLite data, mock model parsing and blocked external browser requests. No phone,
+   hosted data or paid API was used. Harness stops both servers when tests finish.
+2. Tests cover actual review/edit/save/reload/snooze/complete/delete, separate browser
+   device identities, editable/cancellable email, failed parse preservation/retry and
+   explicit native-notification unavailability. Added accessible add/open-reminder labels.
+3. Initial tests exposed Expo's cached public environment: a reused bundle was still
+   in demo mode. The harness now exports with `--clear` and every test asserts a real
+   registered device token exists. All five connected browser tests then passed.
+4. Added `npm run preview:isolated` for a disposable interactive browser preview. It
+   prints separate localhost-browser and emulator API addresses; Ctrl+C stops servers.
+5. Installed the matching Chromium revision (the previously cached revision was older).
+   Added ignored Playwright results/report paths; reports contain synthetic test data only.
+6. TypeScript checked. Commit scope: browser tooling/harness/tests, accessible labels
+   and this record. Android tools/image installation proceeds as a separate step.

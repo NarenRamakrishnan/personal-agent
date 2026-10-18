@@ -6,7 +6,7 @@ type Props = { reminder: Reminder; onPress: () => void };
 export function ReminderCard({ reminder, onPress }: Props) {
   const location = reminder.location?.name ?? reminder.location?.category;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Open reminder: ${reminder.title}`} onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={[styles.checkbox, reminder.completed && styles.checkboxCompleted]}>
         {reminder.completed && <Text style={styles.checkmark}>✓</Text>}
       </View>

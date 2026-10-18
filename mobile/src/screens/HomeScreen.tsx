@@ -22,7 +22,7 @@ export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error
           <Text style={styles.eyebrow}>CONTEXT ASSISTANT</Text>
           <Text style={styles.heading}>Your reminders</Text>
         </View>
-        <Pressable style={styles.addButton} onPress={() => navigation.navigate("AddReminder")}><Text style={styles.addButtonText}>＋</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add reminder" style={styles.addButton} onPress={() => navigation.navigate("AddReminder")}><Text style={styles.addButtonText}>＋</Text></Pressable>
       </View>
       <View style={styles.toolbar}>
         <Text style={styles.count}>{visibleReminders.length} {visibleReminders.length === 1 ? "reminder" : "reminders"}</Text>

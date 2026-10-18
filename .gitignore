@@ -12,3 +12,4 @@ mobile/ios/
 mobile/android/
 mobile/test-results/
 backend/test-results/
+mobile/playwright-report/
