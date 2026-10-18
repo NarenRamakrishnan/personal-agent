@@ -2,10 +2,11 @@
 
 ## 1. What changed and where
 
-This work implements Person 2's side of the two-person plan. Person 1's backend
-was pulled from `origin/main` at `5b8cb02`, inspected and tested, but not edited.
-All new commits are on `person2/mobile-completion` and include an entry in
-[the work log](person2-work-log.md). Nothing has been pushed or merged.
+This work implements Person 2's side of the two-person plan. The original mobile
+implementation was merged to main; the latest backend was pulled at `63ccae6`.
+Follow-up fixes are on `person2/reliability-integration`, without backend source edits.
+Every implementation commit includes [a work-log entry](person2-work-log.md).
+See the [current handoff](person2-reliability-handoff.md) for verification and release gates.
 
 ```text
 mobile/
@@ -46,14 +47,18 @@ the browser vendor's remote service. No fabricated transcript is returned.
 | `EXPO_PUBLIC_USE_MOCKS=true` | Persistent demo reminders, sample email draft, held mock context decisions |
 | `EXPO_PUBLIC_USE_MOCKS=false` | Calls Person 1's real reminder/action/settings endpoints |
 | `EXPO_PUBLIC_API_URL` | Backend address; localhost for browser, computer's LAN IP for a physical phone |
-| `EXPO_PUBLIC_API_KEY` | Optional development backend API gate; bundled in the app and not a secret |
+| `EXPO_PUBLIC_API_KEY` | Leave blank for private device tokens. Explicit legacy shared-key mode shares data among holders; bundled values are not secrets |
 | `EXPO_PUBLIC_PLACES_URL` | Overpass endpoint; default public OpenStreetMap provider |
 
 1. In `backend/`, run `uv sync` and `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`.
 2. For deterministic backend testing without LLM spend, set `PARSER_MODE=mock` in
    the backend environment. Production model configuration belongs to Person 1.
 3. Set the mobile URL and mock flag, then restart Expo so the environment is rebuilt.
-4. If the backend has `API_KEY` set, match it with the mobile development key.
+4. Leave the mobile shared key blank, including against the hosted backend at
+   `https://personal-agent-backend.vercel.app`. The app automatically registers
+   `/devices` and sends its Bearer token. Native tokens use encrypted SecureStore;
+   browser tokens use tab-session storage. Missing/blocked storage fails explicitly.
+   Legacy shared-key mode remains an explicit opt-in for controlled development only.
 5. Verify a typed command produces a real saved reminder, survives reload, and is
    visible through `GET /reminders`.
 
@@ -70,6 +75,13 @@ on the client and the reviewed transcript is sent to `/parse` with time and time
 4. Rebuild when native dependencies or `app.json` permission plugins change.
 5. Use a real device for background and notification checks. Native exports alone
    do not prove native build success; native compilation was not run in this session.
+6. SecureStore and react-native-permissions were added in the follow-up: rebuild
+   the development client, not just the JavaScript bundle. Confirm your desired
+   iOS bundle identifier/Android package before distribution; Expo-generated
+   placeholder identifiers from introspection are not distribution configuration.
+7. On Android 12+, use Home's explicit exact-time alert action to allow Alarms &
+   reminders, then check timing again. Denial retains approximate scheduling and
+   shows a warning; it does not prevent use of the rest of the app.
 
 Generated `mobile/ios/` and `mobile/android/` are ignored under Expo continuous
 native generation. Plugin config supplies microphone/speech descriptions,
@@ -208,9 +220,11 @@ cd backend
 uv run pytest tests/test_contract.py tests/test_reminders.py tests/test_actions.py tests/test_places.py -q
 ```
 
-Recorded results after the follow-up cross-check: 54 mobile tests passed; 4 isolated integration tests passed;
-124 existing backend tests passed; TypeScript, Expo config and web/iOS/Android JS
-exports passed. Normal unit tests skip the separate integration suite by design.
+Latest results: 87 mobile tests passed; 5 authenticated isolated integration tests
+passed; all 693 offline backend tests passed (2 live tests excluded). TypeScript,
+generated native permission configuration and web/iOS/Android exports passed.
+Normal unit tests skip the separate integration suite by design. CI now runs the
+full offline backend suite, including device/security cases, plus the critical audit gate.
 
 The follow-up review added regression coverage for microphone ownership/cancellation,
 deadline/snooze scheduling, delayed context decisions, stale GPS fixes and background
@@ -246,6 +260,14 @@ app restart and history deletion. Verify no duplicate notification within cooldo
 Battery measurement: record starting battery %, elapsed time and ending % for a
 30-minute idle baseline, foreground movement and opted-in background movement;
 use comparable screen/network conditions. This measurement was not performed here.
+Use the [device validation record](person2-device-validation.md) to capture actual
+device/OS/build, results and battery measurements; all entries start as not run.
+
+Quiet-hours behavior: a positive context match held by backend `quietUntil` becomes
+a persisted local notification for that time. The alert explicitly says it was held;
+it is not a fresh location assessment. Completion, deletion, edits, snooze and location
+opt-out cancel stale held schedules once processed locally. Browser notification
+delivery is unsupported. OS delivery still needs device verification.
 
 ## 9. Demo walkthrough (60–90 seconds)
 

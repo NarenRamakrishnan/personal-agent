@@ -427,3 +427,21 @@ Follow the runbook before calling the plan's full real-device milestone complete
    Node 22 install, all-platform exports and authenticated integration follow in step 23.
 6. Commit scope: compatible dependency lock/type pin, credential tests, native-config
    script/CI gate and this record. Security remediation remains an explicit release gate.
+
+## 23 — Final CI-equivalent verification and manual acceptance handoff
+
+1. Ran a clean locked mobile install under Node 22.23.3, TypeScript, native config,
+   JUnit-producing tests, all-platform export and authenticated real HTTP smoke tests.
+   Results: 87 mobile tests, five HTTP integrations, web/iOS/Android exports all passed.
+2. Ran full offline backend pytest: 693 passed, two paid/live tests deselected. Locked
+   uv sync passed on Python 3.12.13. Backend source remains unchanged versus `63ccae6`.
+3. Verified the exact CI critical audit gate exits successfully and produces ignored
+   JSON. The audit still has 23 high/17 moderate findings; no forced SDK change.
+4. Updated the runbook with private authentication, native rebuild/exact-alarm setup,
+   current counts and held-alert semantics. Added a commit-by-commit reliability handoff
+   plus an explicitly unexecuted device/battery/demo acceptance record.
+5. Kept manual limits honest: native compile/delivery, browser click-through, battery,
+   paid-model quality, security remediation and demo recording remain acceptance gates.
+   No production writes, new hosted CI run, branch push or merge were performed.
+6. Commit scope: final documentation/evidence only. Implementation remains in the
+   seven separate tested commits for steps 16–22 on `person2/reliability-integration`.
