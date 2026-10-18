@@ -13,13 +13,16 @@ NVIDIA Nemotron 3 Super on Nebius Token Factory.
 
 ## How it works
 
-1. The phone recognizes speech on the device and sends only the text to the backend.
+1. The phone's speech service recognizes the command; it may process audio online.
+   Only the resulting text is sent to this app's backend.
 2. The backend asks Nemotron to pull out commitments: what to do, when and where.
 3. Each reminder is stored with a time trigger, a place trigger or both.
 4. The app schedules notifications and geofences, so the reminder fires when you are
    near the place or when the time comes.
 
-Audio never leaves the phone. Your reminders live in your own database, not on Nebius.
+This backend never receives raw audio. Apple, Google or the browser's speech service
+may process audio remotely; on-device-only recognition is not enforced. Saved reminders
+live in the configured database; command text is sent to Nebius for parsing in live mode.
 
 ## Repo layout
 
@@ -69,6 +72,13 @@ npm run web
 `EXPO_PUBLIC_API_URL` at your backend to use real parsing. On a physical phone, use
 your computer's LAN address instead of localhost. Restart Expo after changing `.env`.
 
+Hosted backend: `https://personal-agent-backend.vercel.app`. Leave
+`EXPO_PUBLIC_API_KEY` blank: connected mode automatically registers a private device
+and sends its token. Native tokens use encrypted SecureStore; browser tokens last
+only for the tab session. Closing a browser session can mean a new identity next time.
+An explicitly configured legacy shared key makes its holders share data and is not
+a secret when bundled in an app. Do not put a production shared secret in the app.
+
 Speech recognition, notifications and background location on iOS and Android need a
 development build (`npm run ios` or `npm run android`), not Expo Go.
 
@@ -81,6 +91,8 @@ npm test
 
 The full setup guide, every user flow and the demo walkthrough are in the
 [mobile runbook](docs/person2-runbook.md). CI is described in [docs/ci.md](docs/ci.md).
+See the [reliability handoff](docs/person2-reliability-handoff.md) for the latest fixes
+and the physical-device, battery, security and demo gates that remain.
 
 ## Team
 

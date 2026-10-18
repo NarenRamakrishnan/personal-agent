@@ -16,6 +16,7 @@ export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> })
   const load = async () => { setInfo(await privacyApi.info()); setSettings(await privacyApi.settings()); };
   return <Page><Text style={{ fontSize: 28, fontWeight: "700" }}>Privacy & permissions</Text>
     <Text>{USE_MOCKS ? "Demo mode: reminder data stays in local app storage." : "Connected mode: reviewed commands and saved reminders go to your configured backend."} Local app storage is not an encrypted vault.</Text>
+    {!USE_MOCKS && <Text>{process.env.EXPO_PUBLIC_API_KEY ? "Legacy shared-key mode: every holder of this key shares backend data, including deletion access. Do not use a production shared secret in a public app." : "Private device mode: native tokens use encrypted device storage. Browser tokens use tab-session storage, not an encrypted vault; a new browser session may create a different identity."}</Text>}
     <Text>Microphone access occurs only while you choose Speak. This app does not retain raw microphone recordings; your device/browser speech service may process audio online. Nearby places sends coordinates to Overpass; reminder evaluation sends them to your backend when location is enabled.</Text>
     <AsyncButton title="Load backend privacy settings" action={load} />
     {info && <Text>Backend audio stored: {String(info.audioStored)}. Transcript retention: {info.transcriptRetentionDays} days. Keeps transcripts: {String(info.storeTranscripts)}.</Text>}

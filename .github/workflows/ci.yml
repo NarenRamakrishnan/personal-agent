@@ -43,6 +43,8 @@ jobs:
         run: npm run typecheck
       - name: Mobile regression tests
         run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/mobile.xml
+      - name: Dependency audit (critical gate)
+        run: npm audit --audit-level=critical --json > test-results/dependency-audit.json
       - name: Export web, iOS and Android bundles
         run: node node_modules/expo/bin/cli export --platform all
       - name: Upload mobile test results
@@ -88,8 +90,8 @@ jobs:
       - name: Install locked mobile dependencies
         working-directory: mobile
         run: npm ci
-      - name: Existing backend contract, reminder, action and places tests
-        run: uv run --locked pytest tests/test_contract.py tests/test_reminders.py tests/test_actions.py tests/test_places.py -q --junitxml=test-results/backend.xml
+      - name: Full offline backend suite (including devices and security)
+        run: uv run --locked pytest -m "not live" -q --junitxml=test-results/backend.xml
       - name: Real HTTP mobile-to-backend integration
         working-directory: mobile
         run: npm run test:backend

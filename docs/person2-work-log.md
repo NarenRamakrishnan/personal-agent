@@ -392,3 +392,20 @@ Follow the runbook before calling the plan's full real-device milestone complete
    opt-out, invalid dates and unchanged schedules. Tests/TypeScript passed before commit.
 6. Commit scope: held-delivery state, notification/context wiring, opt-out cleanup,
    regressions and this record. Actual quiet-hours delivery still needs phone verification.
+
+## 21 — Full offline CI and accurate privacy disclosures
+
+1. Expanded CI from four selected backend files to the complete offline suite, with
+   an explicit `not live` filter, JUnit output and no paid calls. Authenticated mobile
+   smoke tests now cover production-like refusal/isolation rather than open SQLite.
+2. Added an npm critical-vulnerability gate and retained audit JSON as a CI artifact.
+   Known high/moderate findings remain release work, not silently accepted as clean.
+3. Corrected README's blanket on-device/audio-never-leaves claim: speech services may
+   use remote processing, backend receives text only and live Nebius parsing receives
+   command text. Added private-token setup and explicit legacy shared-key warnings to
+   README, environment example and Privacy UI.
+4. Refreshed CI documentation to distinguish the successful original hosted run from
+   this new, not-yet-pushed workflow. References to the current handoff are completed
+   in the final documentation batch. Backend implementation remains untouched.
+5. Commit scope: workflow, public privacy/auth documentation and disclosure UI; separate
+   dependency updates and final validation/handoff follow in the next work batches.
