@@ -5,7 +5,7 @@ import { privacyApi } from "../api/actions";
 import { USE_MOCKS } from "../api/client";
 import { AsyncButton, Button, Page } from "../components/Controls";
 import { PrivacyInfo, PrivacySettings } from "../types/context";
-import { cancelAllNotifications } from "../services/notifications";
+import { cancelAllNotifications, cancelContextNotifications } from "../services/notifications";
 import { disableBackgroundContext } from "../services/background";
 import { locationPreferenceChanged } from "../services/locationLifecycle";
 import { LOCATION_ENABLED } from "../services/context";
@@ -24,7 +24,7 @@ export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> })
       {!USE_MOCKS && settings.serverKeepsTranscripts && <AsyncButton title="Enable transcript storage" action={async () => { await privacyApi.update({ keepTranscripts: true }); await load(); }} />}
       {!USE_MOCKS && [1, 7, 30].map(days => <AsyncButton key={days} title={`Keep transcripts for at most ${days} days`} action={async () => { await privacyApi.update({ deleteTranscriptsAfterDays: days }); await load(); }} />)}
     </View>}
-    <AsyncButton title="Disable location & background tasks" action={async () => { await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged(); await disableBackgroundContext(); setMessage("Location is disabled in this app."); }} />
+    <AsyncButton title="Disable location & background tasks" action={async () => { await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged(); await cancelContextNotifications(); await disableBackgroundContext(); setMessage("Location is disabled in this app."); }} />
     <AsyncButton title="Open device permission settings" action={async () => { await Linking.openSettings(); }} />
     <Button title="Delete reminder/draft/history data" onPress={() => setConfirm(true)} />
     {confirm && <View style={{ gap: 12 }}><Text>This permanently deletes all reminder, draft and listening history from the configured backend (or demo reminder storage). Saved places are kept. Proceed?</Text>

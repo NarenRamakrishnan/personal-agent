@@ -1,8 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { contextApi, reminderApi, stamp } from "../api/client";
 import { EvalContext, Evaluation } from "../types/context";
-import { notifyNow } from "./notifications";
+import { notifyNow, deferNotification } from "./notifications";
 import { mayNotify } from "./reminderPolicy";
+import { reserveCooldown } from "./heldNotifications";
 export const LOCATION_ENABLED = "context-assistant:location-enabled";
 export const BACKGROUND_ENABLED = "context-assistant:background-enabled";
 let queue = Promise.resolve();
@@ -14,14 +15,15 @@ export function evaluateContext(context: EvalContext, deliver = true): Promise<E
     for (const reminder of await reminderApi.list()) {
       if (reminder.triggerType === "time" || !mayNotify(reminder) || Date.now() - (ledger[reminder.id] ?? 0) < 1800000) continue;
       const decision = await contextApi.evaluate(reminder, { ...context, ...stamp() }); decisions.push(decision);
-      if (deliver && decision.notify && await AsyncStorage.getItem(LOCATION_ENABLED) === "true") {
+      if (deliver && (decision.notify || decision.quietUntil) && await AsyncStorage.getItem(LOCATION_ENABLED) === "true") {
         // The user may complete, delete, snooze or edit while evaluation is in flight.
         const latest = (await reminderApi.list()).find(row => row.id === reminder.id);
         if (!latest || !mayNotify(latest) || JSON.stringify(latest) !== JSON.stringify(reminder)) continue;
         if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") continue;
+        if (!decision.notify && decision.quietUntil) { await deferNotification(latest, decision.quietUntil); continue; }
         await notifyNow(latest);
         ledger[reminder.id] = Date.now();
-        await AsyncStorage.setItem("context-notification-ledger", JSON.stringify(ledger));
+        await reserveCooldown(reminder.id, new Date(ledger[reminder.id]).toISOString());
         await reminderApi.update(reminder.id, { lastNotifiedAt: new Date(ledger[reminder.id]).toISOString() });
       }
     }

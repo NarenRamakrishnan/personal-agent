@@ -9,6 +9,7 @@ import { nearbyPlaces } from "../services/places";
 import { evaluateContext, LOCATION_ENABLED } from "../services/context";
 import { disableBackgroundContext, enableBackgroundContext, syncBackgroundRegions } from "../services/background";
 import { locationPreferenceChanged } from "../services/locationLifecycle";
+import { cancelContextNotifications } from "../services/notifications";
 
 export function LocationScreen() {
   const [enabled, setEnabled] = useState(false); const [context, setContext] = useState<EvalContext>();
@@ -25,7 +26,7 @@ export function LocationScreen() {
       await AsyncStorage.setItem(LOCATION_ENABLED, "true"); setEnabled(true); locationPreferenceChanged();
     }} />
     <AsyncButton title="Disable all location access in this app" action={async () => {
-      await AsyncStorage.setItem(LOCATION_ENABLED, "false"); setEnabled(false); setContext(undefined); locationPreferenceChanged(); await disableBackgroundContext();
+      await AsyncStorage.setItem(LOCATION_ENABLED, "false"); setEnabled(false); setContext(undefined); locationPreferenceChanged(); await cancelContextNotifications(); await disableBackgroundContext();
     }} />
     <Text>Background mode checks places when you move and can use more battery. It sends coordinates to the same services even when this app is closed. Your OS may delay or stop events.</Text>
     <AsyncButton title="Enable background location & geofences" action={enableBackgroundContext} />

@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), list: vi.fn(), update: vi.fn(), evaluate: vi.fn(), notify: vi.fn(), places: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), list: vi.fn(), update: vi.fn(), evaluate: vi.fn(), notify: vi.fn(), defer: vi.fn(), places: vi.fn() }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: mocks.get, setItem: mocks.set } }));
 vi.mock("../src/api/client", () => ({ reminderApi: { list: mocks.list, update: mocks.update }, contextApi: { evaluate: mocks.evaluate }, stamp: () => ({ now: new Date().toISOString(), timezone: "UTC" }) }));
-vi.mock("../src/services/notifications", () => ({ notifyNow: mocks.notify }));
+vi.mock("../src/services/notifications", () => ({ notifyNow: mocks.notify, deferNotification: mocks.defer }));
 vi.mock("../src/services/places", () => ({ nearbyPlaces: mocks.places }));
 vi.mock("expo-location", () => ({}));
 vi.mock("react-native", () => ({ AppState: {} }));
@@ -16,6 +16,8 @@ it.each(["completed", "deleted", "snoozed", "edited"])("suppresses an evaluation
   mocks.list.mockResolvedValueOnce([reminder]).mockResolvedValueOnce(latest); await evaluateContext(context); expect(mocks.notify).not.toHaveBeenCalled();
 });
 it("delivers an unchanged eligible reminder and records the cooldown", async () => { await evaluateContext(context); expect(mocks.notify).toHaveBeenCalledWith(reminder); expect(mocks.set).toHaveBeenCalledWith("context-notification-ledger", expect.any(String)); expect(mocks.update).toHaveBeenCalledWith("r", expect.objectContaining({ lastNotifiedAt: expect.any(String) })); });
+it("schedules a held reminder at quietUntil instead of waiting for movement", async () => { const until = new Date(Date.now() + 600000).toISOString(); mocks.evaluate.mockResolvedValue({ notify: false, quietUntil: until }); await evaluateContext(context); expect(mocks.defer).toHaveBeenCalledWith(reminder, until); expect(mocks.notify).not.toHaveBeenCalled(); });
+it("does not schedule a held reminder in preview-only mode", async () => { mocks.evaluate.mockResolvedValue({ notify: false, quietUntil: new Date(Date.now() + 600000).toISOString() }); await evaluateContext(context, false); expect(mocks.defer).not.toHaveBeenCalled(); });
 it("rechecks opt-in after the evaluator returns", async () => { mocks.evaluate.mockImplementation(async () => { mocks.get.mockResolvedValue("false"); return { notify: true }; }); await evaluateContext(context); expect(mocks.notify).not.toHaveBeenCalled(); });
 it("respects the persisted notification cooldown", async () => { mocks.get.mockImplementation(async key => key === LOCATION_ENABLED ? "true" : JSON.stringify({ r: Date.now() })); await evaluateContext(context); expect(mocks.evaluate).not.toHaveBeenCalled(); });
 it.each(["stale", "future", "invalid", "inaccurate"])("rejects %s GPS fixes before querying places", async kind => {

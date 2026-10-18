@@ -374,3 +374,21 @@ Follow the runbook before calling the plan's full real-device milestone complete
    concurrent writes and recovery/error states. Tests and TypeScript passed.
 4. Commit scope: App state/lifecycle wiring, reminder store, four regression tests
    and this documentation; held-notification changes are a separate work batch.
+
+## 20 — Persisted quiet-hours delivery
+
+1. Handle backend `quietUntil` by scheduling a local alert at that time, rather than
+   waiting for movement. Wording says the reminder was held during quiet hours and
+   does not claim the user is still near the earlier place. This is deferred delivery
+   of an already evaluated reminder, not a fresh GPS check at delivery time.
+2. Persist stable held IDs/fingerprints and reserve cooldown through the planned
+   delivery time. Reconcile without duplicates after restart; completed, deleted,
+   edited or snoozed reminders cancel stale schedules and release future reservations.
+3. Location opt-out and history deletion cancel held alerts. Serialize scheduling,
+   cancellation and cooldown writes; never clear unrelated notifications.
+4. Browser explicitly reports unavailable; Android denied exact-alarm access surfaces
+   approximate timing. No background JS timer is relied upon for delivery.
+5. Added tests for quiet scheduling, preview-only evaluation, persistence, cancellation,
+   opt-out, invalid dates and unchanged schedules. Tests/TypeScript passed before commit.
+6. Commit scope: held-delivery state, notification/context wiring, opt-out cleanup,
+   regressions and this record. Actual quiet-hours delivery still needs phone verification.
