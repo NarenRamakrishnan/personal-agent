@@ -409,3 +409,21 @@ Follow the runbook before calling the plan's full real-device milestone complete
    in the final documentation batch. Backend implementation remains untouched.
 5. Commit scope: workflow, public privacy/auth documentation and disclosure UI; separate
    dependency updates and final validation/handoff follow in the next work batches.
+
+## 22 — Dependency compatibility and native-config regression gate
+
+1. Ran unforced `npm audit fix` within declared ranges; retained its lockfile refresh.
+   It exits nonzero because 40 advisories remain (23 high, 17 moderate, zero critical).
+   Did not accept audit's forced Expo 44 downgrade or unrelated major RN/SDK changes.
+2. Online Expo compatibility check found root React types had floated to 19.3.
+   Pinned them to Expo SDK 54's `~19.1.10` range and reran online validation: passed.
+   Runtime remains Expo 54 / React 19.1 / React Native 0.81.5.
+3. Added native/browser credential-storage tests (encrypted native access policy,
+   browser session scope and failure when storage is unavailable).
+4. Added a non-mutating native-config check and CI step to verify generated Android
+   exact-alarm/location/mic declarations, iOS permission text/background mode and the
+   SecureStore plugin. This intentionally does not claim native compilation.
+5. Mobile tests: 87 passed, five isolated tests skipped; TypeScript passed. Final clean
+   Node 22 install, all-platform exports and authenticated integration follow in step 23.
+6. Commit scope: compatible dependency lock/type pin, credential tests, native-config
+   script/CI gate and this record. Security remediation remains an explicit release gate.

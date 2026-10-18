@@ -41,6 +41,8 @@ jobs:
         run: npm ci
       - name: TypeScript
         run: npm run typecheck
+      - name: Generated native permission configuration
+        run: npm run check:native-config
       - name: Mobile regression tests
         run: npm test -- --reporter=default --reporter=junit --outputFile=test-results/mobile.xml
       - name: Dependency audit (critical gate)
