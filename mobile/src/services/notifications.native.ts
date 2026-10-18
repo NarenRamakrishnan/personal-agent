@@ -3,6 +3,12 @@ import { Platform } from "react-native";
 import { reminderApi } from "../api/client";
 import { Reminder } from "../types/reminder";
 import { notificationDate, notificationId } from "./reminderPolicy";
+import { exactAlarmsAllowed, requestExactAlarms } from "./alarmPermission";
+
+export async function notificationTimingStatus() {
+  return await exactAlarmsAllowed() ? "Exact-time scheduling is allowed. Delivery still depends on your device settings." : "Exact-time scheduling is disabled. Android may delay reminders. Allow Alarms & reminders in system settings.";
+}
+export async function enableExactTimeAlerts() { await requestExactAlarms(); }
 
 Notifications.setNotificationHandler({ handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }) });
 export async function enableNotifications() {
@@ -23,6 +29,15 @@ export function reconcileNotifications(reminders: Reminder[]) {
 async function reconcile(reminders: Reminder[]) {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
+  if (reminders.some(reminder => notificationDate(reminder)) && !await exactAlarmsAllowed()) {
+    // Keep best-effort scheduling available; surface the limitation rather than
+    // silently promising an exact deadline. Callers can open the explicit settings flow.
+    await reconcileSchedules(reminders);
+    throw new Error("Reminders are scheduled approximately. Allow exact-time alerts in Alarms & reminders settings.");
+  }
+  await reconcileSchedules(reminders);
+}
+async function reconcileSchedules(reminders: Reminder[]) {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const wanted = new Map(reminders.flatMap(reminder => {
     const date = notificationDate(reminder);

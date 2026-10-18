@@ -346,3 +346,18 @@ Follow the runbook before calling the plan's full real-device milestone complete
 4. Checks: mobile tests, TypeScript and isolated authenticated HTTP integration.
    Actual provider coverage remains dependent on OSM data; no claim every store exists.
 5. Commit scope: Places mapping/query, regressions and this step record.
+
+## 18 — Android exact-alarm permission flow
+
+1. Added `SCHEDULE_EXACT_ALARM` to Expo Android configuration (not the restricted
+   auto-granted `USE_EXACT_ALARM`). Added the native permissions API for access checks
+   and explicit Alarms & reminders settings navigation; no unsolicited settings prompt.
+2. Added Home timing status/check/settings controls. Scheduling checks current access;
+   denied access retains best-effort reminders but surfaces an approximate-delivery
+   warning instead of claiming exact delivery. Reconciliation can be retried after grant.
+3. Older Android and iOS bypass the Android-only gate. Browser reports unsupported.
+   Native rebuild required; hardware delivery and OS power behavior remain unverified.
+4. Added regressions for permission status, explicit settings requests, existing grants,
+   older platforms and best-effort fallback. Mobile tests and TypeScript passed.
+5. Commit scope: native permission dependency/service, configuration, notification/Home
+   wiring, tests and this record. Primary API reference: react-native-permissions README.

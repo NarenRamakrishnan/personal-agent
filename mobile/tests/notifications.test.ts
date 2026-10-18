@@ -7,6 +7,8 @@ const notifications = vi.hoisted(() => ({
 vi.mock("expo-notifications", () => notifications);
 vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
 vi.mock("../src/api/client", () => ({ reminderApi: {} }));
+vi.mock("../src/services/alarmPermission", () => ({ exactAlarmsAllowed: vi.fn(async () => true), requestExactAlarms: vi.fn() }));
+import { exactAlarmsAllowed } from "../src/services/alarmPermission";
 import { reconcileNotifications } from "../src/services/notifications.native";
 import { Reminder } from "../src/types/reminder";
 const date = new Date(Date.now() + 86400000).toISOString();
@@ -28,4 +30,8 @@ it("replaces a deadline when snoozed", async () => {
 });
 it("does not schedule when permission is denied", async () => {
   notifications.getPermissionsAsync.mockResolvedValue({ granted: false }); await reconcileNotifications([row]); expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+});
+it("warns but retains best-effort reminders if exact alarms are denied", async () => {
+  vi.mocked(exactAlarmsAllowed).mockResolvedValueOnce(false);
+  await expect(reconcileNotifications([row])).rejects.toThrow("approximately"); expect(notifications.scheduleNotificationAsync).toHaveBeenCalled();
 });

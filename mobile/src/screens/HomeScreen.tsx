@@ -6,12 +6,13 @@ import { ReminderCard } from "../components/ReminderCard";
 import { RootStackParamList } from "../navigation/types";
 import { Reminder } from "../types/reminder";
 import { AsyncButton, Button } from "../components/Controls";
-import { enableNotifications, reconcileNotifications } from "../services/notifications";
+import { enableNotifications, reconcileNotifications, notificationTimingStatus, enableExactTimeAlerts } from "../services/notifications";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home"> & { reminders: Reminder[]; onRefresh: () => Promise<void>; refreshing: boolean; error: string };
 
 export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error }: Props) {
   const [showCompleted, setShowCompleted] = useState(false);
+  const [timing, setTiming] = useState("");
   const visibleReminders = showCompleted ? reminders : reminders.filter((reminder) => !reminder.completed);
 
   return (
@@ -27,7 +28,7 @@ export function HomeScreen({ navigation, reminders, onRefresh, refreshing, error
         <Text style={styles.count}>{visibleReminders.length} {visibleReminders.length === 1 ? "reminder" : "reminders"}</Text>
         <Pressable onPress={() => setShowCompleted((value) => !value)}><Text style={styles.filter}>{showCompleted ? "Hide completed" : "Show completed"}</Text></Pressable>
       </View>
-      <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 10 }}><AsyncButton title="Enable reminder notifications" action={async () => { await enableNotifications(); await reconcileNotifications(reminders); }} /><Button title="Location & saved places" onPress={() => navigation.navigate("Location")} /></View>
+      <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 10 }}><AsyncButton title="Enable reminder notifications" action={async () => { await enableNotifications(); setTiming(await notificationTimingStatus()); await reconcileNotifications(reminders); }} /><AsyncButton title="Allow exact-time alerts (Android)" action={enableExactTimeAlerts} /><AsyncButton title="Check notification timing" action={async () => { setTiming(await notificationTimingStatus()); await reconcileNotifications(reminders); }} />{timing ? <Text accessibilityRole="alert">{timing}</Text> : null}<Button title="Location & saved places" onPress={() => navigation.navigate("Location")} /></View>
       <FlatList
         data={visibleReminders}
         keyExtractor={(item) => item.id}
