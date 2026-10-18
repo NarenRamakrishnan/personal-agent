@@ -7,6 +7,8 @@ implementation was merged to main; the latest backend was pulled at `63ccae6`.
 Follow-up fixes are on `person2/reliability-integration`, without backend source edits.
 Every implementation commit includes [a work-log entry](person2-work-log.md).
 See the [current handoff](person2-reliability-handoff.md) for verification and release gates.
+The later [phone-free testing guide](person2-phone-free-testing.md) records real browser
+click-throughs and Android emulator build/runtime tests; these are not physical-phone passes.
 
 ```text
 mobile/
@@ -74,7 +76,8 @@ on the client and the reviewed transcript is sent to `/parse` with time and time
 3. Subsequent development sessions use `npm start` for the development client.
 4. Rebuild when native dependencies or `app.json` permission plugins change.
 5. Use a real device for background and notification checks. Native exports alone
-   do not prove native build success; native compilation was not run in this session.
+   do not prove native build success. Android native compilation and an emulator subset
+   were subsequently run; physical-device delivery and iOS compilation remain unverified.
 6. SecureStore and react-native-permissions were added in the follow-up: rebuild
    the development client, not just the JavaScript bundle. Confirm your desired
    iOS bundle identifier/Android package before distribution; Expo-generated
@@ -251,6 +254,11 @@ the existing SDK compatibility. This is not a claim of a clean production audit.
 | 12 | Privacy, permission states, movement-based updates | Battery baseline versus foreground/background use |
 | 13 | Automated tests and this device matrix | Execute matrix on iOS and Android |
 | 14 | Accessible controls, demo instructions and architecture | Demo device setup and 60–90-second recording |
+
+Phone-free follow-up: five real browser UI scenarios now pass, and Android emulator
+startup/creation/background timer delivery/restart persistence have been exercised.
+The remaining-verification column above describes physical-phone acceptance; see
+the phone-free guide for the separate emulator evidence and native startup fix.
 
 For each phone test record device/OS/build, scenario, expected behavior, actual
 behavior and pass/fail. Test foreground/background, revoked permissions, offline API,

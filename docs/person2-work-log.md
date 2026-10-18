@@ -489,3 +489,25 @@ Follow the runbook before calling the plan's full real-device milestone complete
    TypeScript, native-config guard and five browser tests after the dependency fix.
 7. Commit scope: emulator config/script, compatible asset dependency/plugin/guard,
    safe-area correction and this evidence. New browser CI and final guide follow separately.
+
+## 26 — Final phone-free evidence, CI and handoff
+
+1. Added connected browser acceptance as a third CI job with locked Node/Python setup,
+   Chromium installation and failure-report artifacts. YAML structure verified; no
+   push/new hosted run claimed. Final Node 22.23.3 browser rerun: five passed.
+2. Recorded actual Android timer delivery at 112s after backgrounding for a reviewed
+   120-second deadline. Native device identity/reminder persisted after force-stop.
+3. Made the ADB harness resilient to development-client onboarding, lost reverse-port
+   mappings after bridge reconnect and Android's specific partial dumpsys exit 255.
+   A complete 30-second retest exited 0: delivery at 23s after backgrounding, then
+   successful restart persistence. No live-model accuracy claim: dates were reviewed.
+4. Rechecked 87 mobile unit tests, TypeScript, native-config/asset guard and whitespace.
+   Added the phone-free setup/results guide and refreshed runbook/physical-device
+   records to separate observed emulator results from untested hardware behavior.
+5. Left an isolated browser preview available at the printed localhost URL and opened
+   it for interactive use; reopened the tested virtual device visibly after headless
+   tests. No phone, hosted data or paid calls were used. SDK/AVD tools remain installed
+   outside the repository; generated native projects/APK/screenshots remain ignored.
+6. Commit scope: CI/browser evidence, final ADB harness reliability and documentation.
+   Physical microphone, real travel/geofences, battery, native mail, iOS and dependency
+   security gates remain open. No merge or push performed.

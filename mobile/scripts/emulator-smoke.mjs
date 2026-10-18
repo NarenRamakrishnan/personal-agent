@@ -9,7 +9,17 @@ const serial = process.env.PERSON2_ADB_SERIAL ?? "emulator-5554";
 if (!/^emulator-\d+$/.test(serial)) throw new Error("This test refuses physical-device serials.");
 const bridge = join(process.env.ANDROID_HOME ?? join(homedir(), "Library/Android/sdk"), "platform-tools/adb");
 const pkg = "com.contextassistant.emulatortest";
-const adb = async (...args) => (await run(bridge, ["-s", serial, ...args], { timeout: 30000, maxBuffer: 8 * 1024 * 1024 })).stdout;
+const delaySeconds = Number(process.env.PERSON2_TIMER_SECONDS ?? 120);
+if (!Number.isInteger(delaySeconds) || delaySeconds < 30 || delaySeconds > 180) throw new Error("Timer must be between 30 and 180 seconds.");
+const adb = async (...args) => {
+  try { return (await run(bridge, ["-s", serial, ...args], { timeout: 30000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
+  catch (error) {
+    // Android can return 255 after emitting a partial notification-service snapshot.
+    // Keep polling/inspect its emitted state; never mask other commands or ADB errors.
+    if (args[1] === "dumpsys" && args[2] === "notification" && error.code === 255 && error.stdout?.includes("Current Notification Manager state:")) return error.stdout;
+    throw error;
+  }
+};
 if ((await adb("shell", "getprop", "ro.kernel.qemu")).trim() !== "1") throw new Error("Target is not an emulator.");
 const decode = text => text.replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 async function screen() {
@@ -43,6 +53,7 @@ async function dismissDeveloperMenu() {
   if ((await screen()).some(node => node.text === "Continue")) await tap("Continue");
   if ((await screen()).some(node => node["content-desc"] === "Close" || node.text === "Close")) await tap("Close");
 }
+await adb("reverse", "tcp:8081", "tcp:8081");
 await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+context-aware-personal-assistant://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
 await dismissDeveloperMenu();
 await assertText("Your reminders");
@@ -67,25 +78,26 @@ await tap("Review reminder"); await assertText("Confirm reminder");
 // Review/edit the date explicitly: this tests native delivery, not live LLM quality.
 const expectedTitle = `Emulator timed check ${Date.now()}`;
 await fill("Title", expectedTitle);
-await fill("Deadline (ISO date with timezone, or leave empty)", new Date(Date.now() + 120000).toISOString());
+await fill("Deadline (ISO date with timezone, or leave empty)", new Date(Date.now() + delaySeconds * 1000).toISOString());
 await tap("Save reminder");
 const nodes = await screen(); const reminder = nodes.find(node => node["content-desc"] === `Open reminder: ${expectedTitle}`);
 if (!reminder) throw new Error("Created reminder not visible in native list.");
 const title = reminder["content-desc"].slice("Open reminder: ".length);
 await screenshot("native-reminder.png");
 await adb("shell", "input", "keyevent", "3");
-console.log("PASS: native text → parse → confirm → save. App backgrounded; waiting for actual two-minute notification.");
+console.log(`PASS: native text → parse → confirm → save. App backgrounded; waiting for the reviewed ${delaySeconds}-second notification.`);
 const started = Date.now(); let notified = false;
-while (Date.now() - started < 155000) {
+while (Date.now() - started < (delaySeconds + 35) * 1000) {
   const dump = await adb("shell", "dumpsys", "notification", "--noredact");
   if (dump.includes(`android.text=String (${title})`)) { notified = true; break; }
   await new Promise(done => setTimeout(done, 3000));
 }
-if (!notified) throw new Error("Two-minute notification was not observed in the Android notification service.");
+if (!notified) throw new Error("Reviewed timed notification was not observed in the Android notification service.");
 await adb("shell", "cmd", "statusbar", "expand-notifications"); await new Promise(done => setTimeout(done, 1000)); await screenshot("delivered-notification.png");
 console.log(`PASS: Android posted the timed notification while the app was backgrounded (${Math.round((Date.now() - started) / 1000)} s after backgrounding).`);
 await adb("shell", "cmd", "statusbar", "collapse");
 await adb("shell", "am", "force-stop", pkg);
+await adb("reverse", "tcp:8081", "tcp:8081");
 await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+context-aware-personal-assistant://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
 await dismissDeveloperMenu();
 await assertText(title); console.log("PASS: native device identity and reminder survived app restart.");

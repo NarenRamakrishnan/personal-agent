@@ -94,6 +94,10 @@ The full setup guide, every user flow and the demo walkthrough are in the
 See the [reliability handoff](docs/person2-reliability-handoff.md) for the latest fixes
 and the physical-device, battery, security and demo gates that remain.
 
+To try it without a phone, see the [phone-free testing guide](docs/person2-phone-free-testing.md):
+`npm run preview:isolated` provides a disposable browser preview, while
+`npm run test:browser` runs real browser acceptance tests against temporary data.
+
 ## Team
 
 Naren Ramakrishnan (mobile app) and Mihir Kolakaluri (backend and AI).

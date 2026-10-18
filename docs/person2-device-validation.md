@@ -1,7 +1,14 @@
-# Device acceptance record — not yet executed
+# Physical-device acceptance record — not yet executed
 
 Use a new copy per device/build. Do not mark a test passed without observing it.
 Do not record API tokens, raw speech, coordinates or private messages in shared reports.
+
+Phone-free follow-up: Chromium acceptance and an Android emulator subset have now
+been executed. They are recorded in the [phone-free guide](person2-phone-free-testing.md),
+not marked as physical-device passes below. The emulator caught and enabled fixing a
+native startup crash; background timer delivery and native restart persistence were
+observed without using a phone. Real geofence travel, microphone/battery and iOS
+behavior are still outside that evidence.
 
 Device/model: ___  OS: ___  app/build SHA: ___  tester/date: ___
 Backend environment: ___  network: ___  battery/power mode: ___

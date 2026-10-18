@@ -1,7 +1,7 @@
 # Continuous integration
 
 `.github/workflows/ci.yml` runs on branch pushes, pull requests and manual dispatch.
-No deployments, paid API calls or native signing credentials are needed. The two
+No deployments, paid API calls or native signing credentials are needed. The three
 jobs run in parallel on Ubuntu, with read-only repository permission, checkout
 credentials disabled, dependency caches, timeouts and cancellation of older runs.
 
@@ -11,6 +11,7 @@ credentials disabled, dependency caches, timeouts and cancellation of older runs
 | --- | --- |
 | Mobile checks and platform exports | `npm ci`, TypeScript, mobile regression tests, Expo web/iOS/Android JS/Hermes exports |
 | API integration and backend contracts | `uv sync --locked --dev`, full offline backend suite including device/security tests, authenticated isolated real HTTP mobile-client integration |
+| Connected browser acceptance | Matching Chromium, cleared web export, disposable authenticated backend and five actual browser click-through scenarios |
 
 Node 22 and Python 3.12 are used; uv is pinned to 0.11.7. Both package lockfiles
 are enforced. The backend smoke harness creates its own temporary SQLite database
@@ -22,7 +23,8 @@ has authentication enabled in the harness, rather than relying on local open acc
 
 JUnit reports are uploaded even when tests fail. Successful platform exports are
 uploaded separately. Artifacts expire after seven days. No temporary database,
-credentials or `.env` files are uploaded.
+production credentials or `.env` files are uploaded. Failure traces can contain
+disposable local test tokens and synthetic text; the test server stops after the run.
 
 ## Activation and merge protection
 
@@ -42,6 +44,10 @@ behavior, mail composer or battery usage. Follow the Person 2 runbook's device m
 Dependency audit gates critical advisories and saves JSON in the mobile test artifact.
 High/moderate advisories still require review before public release; this is not a
 claim of a clean audit. No new Person 1 implementation was added.
+
+Browser acceptance does not test speech hardware, native notifications or battery.
+The local Android emulator test is separate from hosted CI; see the
+[phone-free testing guide](person2-phone-free-testing.md).
 
 ## Original local validation (step 15; superseded by reliability handoff)
 

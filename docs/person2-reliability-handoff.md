@@ -1,5 +1,11 @@
 # Person 2 reliability handoff — October 18, 2026
 
+**Phone-free follow-up:** the later [browser/emulator guide](person2-phone-free-testing.md)
+supersedes the earlier browser/native-build blockers below for Android only. Actual
+Chromium UI tests, Android native compilation/startup and background timed delivery
+have now been exercised, including a native runtime crash fix. Physical-phone, iOS,
+battery/live-model/security gates remain open. Work-log steps 24–26 contain evidence.
+
 ## Scope
 
 Base: latest main `63ccae6`. Feature branch: `person2/reliability-integration`.
