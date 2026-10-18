@@ -361,3 +361,16 @@ Follow the runbook before calling the plan's full real-device milestone complete
    older platforms and best-effort fallback. Mobile tests and TypeScript passed.
 5. Commit scope: native permission dependency/service, configuration, notification/Home
    wiring, tests and this record. Primary API reference: react-native-permissions README.
+
+## 19 — Reminder state ordering and app-resume refresh
+
+1. Replaced ad-hoc App reads/writes with an observable reminder store. Reads carry
+   request/revision tokens; mutations invalidate prior reads immediately and serialize
+   writes, so a delayed refresh cannot restore completed/deleted/old reminder state.
+2. Mutations trigger an authoritative refresh after the write queue drains. Failed
+   writes do not poison the queue. Added foreground-resume refresh for notification
+   actions/background server changes and stable React external-store subscriptions.
+3. Added regressions for delayed completion/list responses, out-of-order reads,
+   concurrent writes and recovery/error states. Tests and TypeScript passed.
+4. Commit scope: App state/lifecycle wiring, reminder store, four regression tests
+   and this documentation; held-notification changes are a separate work batch.
