@@ -511,3 +511,25 @@ Follow the runbook before calling the plan's full real-device milestone complete
 6. Commit scope: CI/browser evidence, final ADB harness reliability and documentation.
    Physical microphone, real travel/geofences, battery, native mail, iOS and dependency
    security gates remain open. No merge or push performed.
+
+## 27 — Owner-requested shutdown, download cleanup and main integration
+
+1. Closed only the isolated localhost preview tab, stopped its static/API servers and
+   Metro, shut down the test emulator/ADB and terminated the identified build daemons.
+   Verified no listeners remain on the three test ports and no emulator/ADB process remains.
+2. Uninstalled the newly added Homebrew Android command-line tools. Deleted the test
+   SDK/image/NDK, dedicated AVD, new Chromium 1248/headless/FFmpeg 1013 downloads,
+   temporary Node 22 installation, new Gradle 8.14.3/JDK/build caches, generated
+   ignored Android project/APK and all six identified temporary browser databases/exports.
+   These are regenerable downloads/build artifacts, not recoverable source files in Git.
+3. Preserved older Chromium 1243/FFmpeg 1011, Gradle 9.3.0, system Java, existing
+   application dependencies, source, lockfiles and test evidence. No broad home/cache
+   wipe, hosted-data changes, phone changes or unrelated tool uninstall was performed.
+4. After cleanup, TypeScript, all 87 mobile unit tests and native-config validation
+   passed; five HTTP cases are intentionally skipped in the ordinary unit command.
+   Browser/native results remain those recorded in steps 24–26, not new reruns after
+   deleting their tools. Updated the phone-free guide to make this explicit.
+5. Fetched origin and confirmed latest main is an ancestor of the feature branch
+   (zero upstream-only commits). Owner explicitly authorized integration/push to main.
+   Commit this record on the feature branch, fast-forward main and push normally;
+   never force-push. Hosted CI results must be checked separately from local evidence.

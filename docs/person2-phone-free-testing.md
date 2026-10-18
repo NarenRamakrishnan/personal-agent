@@ -1,8 +1,18 @@
 # Try Heedly without installing it on your phone
 
 All commands below use local test data. Do not point destructive test flows at the
-hosted backend. The phone-free work continues on `person2/reliability-integration`;
-backend implementation and hosted data were not modified.
+hosted backend. The phone-free work was developed on `person2/reliability-integration`
+and is being integrated into `main` at the owner's request; backend implementation
+and hosted data were not modified.
+
+Cleanup update: the owner requested that test windows be closed and downloads removed.
+The preview/API/Metro servers and emulator are stopped. The newly installed Android
+command-line tools, SDK, virtual device, Chromium revision 1248/FFmpeg revision 1013,
+test Node 22 download, new Gradle 8.14.3/JDK/build caches, generated Android project
+and disposable browser databases/exports were deleted. Older Chromium 1243, FFmpeg
+1011, Gradle 9.3.0, system Java and application dependencies were preserved.
+The results below remain historical evidence; repeating the tests requires reinstalling
+their tools. These generated/downloaded files can be recreated, not restored from Git.
 
 ## Browser: easiest interactive preview
 
@@ -40,9 +50,9 @@ When changing public environment values for your own sessions, restart Expo with
 `--clear` as well. HTML reports are in `mobile/playwright-report`; failed traces and
 screenshots are in `mobile/test-results/browser`. Both are ignored by Git.
 
-## Android emulator installed on this Mac
+## Android emulator setup used for validation (now removed)
 
-The local setup has:
+The local setup used:
 
 - Android command-line tools installed through Homebrew.
 - SDK at `/Users/naren/Library/Android/sdk`: API 36, build tools 36/35, NDK 27.1,
