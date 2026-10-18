@@ -2,22 +2,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ParsedReminder, Reminder } from "../types/reminder";
 import { EvalContext, Evaluation, SavedPlace } from "../types/context";
 import { mockReminders } from "../data/mockReminders";
+import { credentials } from "../services/credentials";
+import { createDeviceAuth } from "./deviceAuth";
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 export const USE_MOCKS = process.env.EXPO_PUBLIC_USE_MOCKS !== "false";
 export const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 export const stamp = () => ({ now: new Date().toISOString(), timezone: timezone() });
 export const MOCK_REMINDERS_KEY = "context-assistant:mock-reminders:v1";
+const deviceAuth = createDeviceAuth(API_BASE_URL, credentials);
 
 export async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  // The shared key is an explicitly configured legacy/demo opt-in, not the default.
+  const auth: Record<string, string> = process.env.EXPO_PUBLIC_API_KEY ? { "X-API-Key": process.env.EXPO_PUBLIC_API_KEY } : { Authorization: `Bearer ${await deviceAuth.getToken()}` };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method, signal: controller.signal,
-      headers: { "Content-Type": "application/json", ...(process.env.EXPO_PUBLIC_API_KEY ? { "X-API-Key": process.env.EXPO_PUBLIC_API_KEY } : {}) },
+      headers: { "Content-Type": "application/json", ...auth },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
+      if (response.status === 401) throw new Error("Device access was rejected. Your saved identity was kept; check the backend or contact its operator. A new identity would not restore your reminders.");
       const data = await response.json().catch(() => ({}));
       throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`);
     }

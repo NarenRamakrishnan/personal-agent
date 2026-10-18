@@ -314,3 +314,21 @@ Follow the runbook before calling the plan's full real-device milestone complete
    from `5b8cb02`. Updated CI documentation with actual validation and runtime limits.
 6. Commit contains the export-command adjustment and validation documentation. No
    branch push, GitHub-hosted run, repository setting change or merge was performed.
+
+## 16 — Private device authentication (follow-up at main `63ccae6`)
+
+1. Created `person2/reliability-integration`; no implementation commits on main.
+2. Added automatic `/devices` registration, backend-scoped tokens and single-flight
+   registration. Native credentials use SDK-compatible Expo SecureStore with
+   after-first-unlock device-only access for background tasks. Browser credentials
+   use tab-session storage, explicitly not an encrypted vault or persistent login.
+3. Kept the explicit legacy shared-key option for compatibility; default connected
+   mode uses Bearer tokens. A 401 never silently discards identity or creates a new
+   owner, avoiding the appearance of lost data. Credential-storage failures fail closed.
+4. Added registration/storage/isolation and request-header regression tests. Changed
+   the isolated HTTP harness to require authentication, with blank mobile shared key.
+   The five HTTP tests now include unauthenticated refusal and cross-device isolation.
+5. Tests: mobile suite and TypeScript checked before commit; isolated authenticated
+   HTTP suite: five passed. No production devices, reminders or paid model calls created.
+6. Commit scope: device-auth/storage services, API wiring, secure-store dependency/plugin,
+   associated tests, isolated harness and this documentation.

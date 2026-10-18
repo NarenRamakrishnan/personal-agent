@@ -12,7 +12,7 @@ const port = server.address().port; await new Promise(resolveClose => server.clo
 const testDir = await mkdtemp(join(tmpdir(), "person2-smoke-"));
 const backend = resolve(mobile, "../backend");
 const child = spawn(join(backend, ".venv/bin/python"), ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(port)], {
-  cwd: backend, stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, DATABASE_URL: `sqlite:///${join(testDir, "smoke.db")}`, PARSER_MODE: "mock", NEBIUS_API_KEY: "", API_KEY: "", STORE_TRANSCRIPTS: "true" },
+  cwd: backend, stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, DATABASE_URL: `sqlite:///${join(testDir, "smoke.db")}`, PARSER_MODE: "mock", NEBIUS_API_KEY: "", API_KEY: "isolated-test-requires-device-auth", STORE_TRANSCRIPTS: "true" },
 });
 let startupError; child.on("error", error => { startupError = error; });
 let logs = ""; child.stderr.on("data", data => { logs += data; });

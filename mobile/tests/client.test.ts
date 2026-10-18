@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../src/services/credentials", () => ({ credentials: { get: async () => "test-device-token", set: vi.fn() } }));
 const storage = vi.hoisted(() => new Map<string, string>());
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   getItem: vi.fn(async (key: string) => storage.get(key) ?? null),
@@ -26,11 +27,16 @@ describe("persistent mock reminder workflow", () => {
   });
 });
 describe("backend wire requests", () => {
+  it("does not replace a rejected device identity", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("{}", { status: 401 })); vi.stubGlobal("fetch", fetcher);
+    await expect(createReminderApi(false).list()).rejects.toThrow("saved identity was kept"); expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("includes timezone/time and keeps additional parsed reminders", async () => {
     const parsed = { intent: "create_reminder", title: "Call Mom", triggerType: "time", additional: [{ title: "Call Dad", triggerType: "time" }] };
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(parsed))); vi.stubGlobal("fetch", fetcher);
     expect((await createReminderApi(false).parse("Call Mom and Dad")).additional).toHaveLength(1);
     const [url, options] = fetcher.mock.calls[0]; expect(url).toContain("/parse");
+    expect(options.headers.Authorization).toBe("Bearer test-device-token");
     expect(JSON.parse(options.body)).toMatchObject({ text: "Call Mom and Dad", timezone: expect.any(String), now: expect.stringMatching(/Z$/) });
   });
   it("does not fall back to fake data when the backend rejects input", async () => {

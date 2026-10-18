@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+vi.mock("../src/services/credentials", () => {
+  const tokens = new Map<string, string>();
+  return { credentials: { get: async (key: string) => tokens.get(key) ?? null, set: async (key: string, value: string) => { tokens.set(key, value); } } };
+});
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { setItem: vi.fn() } }));
 import { reminderApi, contextApi, request } from "../src/api/client";
 import { actionsApi, privacyApi } from "../src/api/actions";
+import { API_BASE_URL } from "../src/api/client";
 describe.skipIf(process.env.PERSON2_ISOLATED_DB !== "true")("mobile client → unchanged real backend (isolated database)", () => {
   it("parses, saves, snoozes, completes and deletes a real reminder", async () => {
     const parsed = await reminderApi.parse("Remind me to buy milk tomorrow at 5");
@@ -33,5 +38,16 @@ describe.skipIf(process.env.PERSON2_ISOLATED_DB !== "true")("mobile client → u
     await privacyApi.update({ keepTranscripts: false, deleteTranscriptsAfterDays: 7 });
     expect(await privacyApi.settings()).toMatchObject({ keepTranscripts: false, deleteTranscriptsAfterDays: 7 });
     await privacyApi.deleteHistory(); expect(await request("/actions")).toEqual([]);
+  });
+  it("requires credentials and isolates another device from this client's reminders", async () => {
+    expect((await fetch(`${API_BASE_URL}/reminders`)).status).toBe(401);
+    const saved = await reminderApi.create({ id: "private-device-test", title: "Private", triggerType: "time", completed: false, createdAt: new Date().toISOString() });
+    const registration = await fetch(`${API_BASE_URL}/devices`, { method: "POST" }); expect(registration.status).toBe(201);
+    const { token } = await registration.json();
+    const headers = { Authorization: `Bearer ${token}` };
+    expect(await (await fetch(`${API_BASE_URL}/reminders`, { headers })).json()).toEqual([]);
+    expect((await fetch(`${API_BASE_URL}/reminders/${saved.id}`, { method: "DELETE", headers })).status).toBe(404);
+    expect((await reminderApi.list()).some(row => row.id === saved.id)).toBe(true);
+    await reminderApi.remove(saved.id);
   });
 });

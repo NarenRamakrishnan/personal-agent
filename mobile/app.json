@@ -24,8 +24,24 @@
       ],
       "expo-mail-composer",
       "expo-notifications",
-      ["expo-location", { "locationWhenInUsePermission": "Allow Context Assistant to check nearby reminders while you use the app.", "locationAlwaysAndWhenInUsePermission": "Allow optional background place reminders when you move.", "isIosBackgroundLocationEnabled": true, "isAndroidBackgroundLocationEnabled": true, "isAndroidForegroundServiceEnabled": true }],
-      ["expo-speech-recognition", { "microphonePermission": "Allow Context Assistant to hear commands while you tap to speak.", "speechRecognitionPermission": "Allow Context Assistant to turn spoken commands into text." }]
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Context Assistant to check nearby reminders while you use the app.",
+          "locationAlwaysAndWhenInUsePermission": "Allow optional background place reminders when you move.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Context Assistant to hear commands while you tap to speak.",
+          "speechRecognitionPermission": "Allow Context Assistant to turn spoken commands into text."
+        }
+      ],
+      "expo-secure-store"
     ]
   }
 }
