@@ -1,6 +1,12 @@
 // Validate generated permission configuration without building or writing native projects.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const assetVersion = require("expo-asset/package.json").version;
+// Expo's ordinary compatibility check only examines declared root dependencies.
+// A wildcard transitive peer can otherwise autolink an SDK 57 binary into SDK 54.
+if (require("expo/package.json").version.startsWith("54.") && !assetVersion.startsWith("12.0.")) throw new Error(`expo-asset ${assetVersion} is incompatible with SDK 54; install its SDK-matched root dependency.`);
 const mobile = fileURLToPath(new URL("../", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/expo/bin/cli", import.meta.url));
 const result = spawnSync(process.execPath, [cli, "config", "--type", "introspect", "--json"], { cwd: mobile, encoding: "utf8", timeout: 60000 });

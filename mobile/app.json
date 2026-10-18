@@ -16,6 +16,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-asset",
       [
         "expo-audio",
         {

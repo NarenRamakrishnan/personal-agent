@@ -463,3 +463,29 @@ Follow the runbook before calling the plan's full real-device milestone complete
    Added ignored Playwright results/report paths; reports contain synthetic test data only.
 6. TypeScript checked. Commit scope: browser tooling/harness/tests, accessible labels
    and this record. Android tools/image installation proceeds as a separate step.
+
+## 25 — Native emulator build and real startup fix
+
+1. Installed approved Android command-line tools/SDK packages and an ARM64 API 35
+   Pixel 7 AVD (`heedly_test_api35`) on this Mac. About 8 GB SDK plus 2 GB AVD data;
+   no physical phone was connected, modified or required. SDK-root symlinks resolved
+   Homebrew's AVD manager lookup mismatch. Hardware acceleration verified available.
+2. Added an explicit emulator-only package flag/config and generated ignored Android
+   sources. The first real debug APK compiled in 3m26s, but launching it exposed
+   `AnyTypeCache` missing from native Expo: a wildcard peer had selected expo-asset 57
+   alongside Expo 54. This was not caught by unit tests or bundle exports.
+3. Pinned root expo-asset to SDK 54's `~12.0.13`, added its plugin and a native-config
+   resolved-version guard. Rebuilt successfully in nine seconds; app then launched
+   and authenticated against the disposable local backend. No backend source edits.
+4. Added emulator-only UI automation that rejects physical-device serials, checks
+   qemu, grants special alarm access only to the test package, reviews an explicit
+   two-minute deadline and checks posted notification service state plus restart data.
+   Mock parsing deliberately returns a placeholder date, so delivery testing edits it.
+5. Initial timing run observed actual background delivery at 112s after backgrounding.
+   Restart inspection initially hit Expo's onboarding overlay, not lost data; added
+   deterministic dismissal and a restart-only diagnostic. Final clean-run evidence
+   follows in step 26. Screenshots stay in ignored test-results/emulator.
+6. Corrected Android safe-area handling spotted visually. Rechecked 87 mobile tests,
+   TypeScript, native-config guard and five browser tests after the dependency fix.
+7. Commit scope: emulator config/script, compatible asset dependency/plugin/guard,
+   safe-area correction and this evidence. New browser CI and final guide follow separately.
