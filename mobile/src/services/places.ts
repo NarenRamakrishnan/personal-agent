@@ -27,10 +27,14 @@ export function mapPlaces(elements: Element[], latitude: number, longitude: numb
   }).sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, 100);
 }
 let cache: { latitude: number; longitude: number; at: number; places: NearbyPlace[] } | undefined;
+// Overpass asks apps to back off for 30 s after a 429 or 406 instead of retrying.
+let backoffUntil = 0;
+export function resetPlacesBackoff() { backoffUntil = 0; cache = undefined; }
 export async function nearbyPlaces(latitude: number, longitude: number): Promise<NearbyPlace[]> {
   if (cache && Date.now() - cache.at < 120000 && distanceMeters(latitude, longitude, cache.latitude, cache.longitude) < 100) {
     return cache.places.map(place => ({ ...place, distanceMeters: distanceMeters(latitude, longitude, place.latitude!, place.longitude!) })).sort((a, b) => a.distanceMeters - b.distanceMeters);
   }
+  if (Date.now() < backoffUntil) throw new Error("Nearby place lookup is busy. Try again in a minute.");
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const around = `around:500,${latitude},${longitude}`;
@@ -39,6 +43,7 @@ export async function nearbyPlaces(latitude: number, longitude: number): Promise
     const query = `[out:json][timeout:12];(nwr(${around})[name];nwr(${around})[brand];nwr(${around})[shop];nwr(${around})[amenity~"^(pharmacy|restaurant|fast_food|cafe|university|college|library)$"];nwr(${around})[leisure=fitness_centre];);out center 1000;`;
     const endpoint = process.env.EXPO_PUBLIC_PLACES_URL ?? "https://overpass-api.de/api/interpreter";
     const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `data=${encodeURIComponent(query)}`, signal: controller.signal });
+    if (response.status === 429 || response.status === 406) { backoffUntil = Date.now() + 30000; throw new Error("Nearby place lookup is busy. Try again in a minute."); }
     if (!response.ok) throw new Error("Nearby place lookup is unavailable. Try again later.");
     const data = await response.json() as { elements: Element[] };
     const places = mapPlaces(data.elements, latitude, longitude);
