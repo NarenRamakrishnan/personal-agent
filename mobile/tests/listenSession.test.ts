@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../src/services/credentials", () => ({ credentials: { get: async () => "test-device-token", set: vi.fn() } }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}) } }));
 import { SessionApi, SessionEndedError } from "../src/api/sessions";
-import { createListenSession, isEmailCommand } from "../src/services/listenSession";
+import { createListenSession, isEmailCommand, planTranscript } from "../src/services/listenSession";
 import { Reminder } from "../src/types/reminder";
 
 const reminder = (id: string, title: string, extra: Partial<Reminder> = {}): Reminder =>
@@ -15,6 +15,7 @@ function fakeApi(overrides: Partial<SessionApi> = {}) {
     parse: vi.fn(async (sessionId: string, text: string) => ({ sessionId, reminders: [reminder(text, text)], pendingChunks: 0, changed: [] })),
     email: vi.fn(async (sessionId: string) => ({ id: "e1", type: "email" as const, status: "needs_approval" as const, createdAt: "", email: { toName: "Alex", subject: "Running late", body: "Hi" } })),
     end: vi.fn(async (sessionId: string) => ({ id: sessionId, status: "ended" as const, startedAt: "", lastActivityAt: "", reminders: [], actions: [], pendingChunks: 0, changed: [] })),
+    retry: vi.fn(async (sessionId: string) => ({ id: sessionId, status: "ended" as const, startedAt: "", lastActivityAt: "", reminders: [], actions: [], pendingChunks: 0, changed: [] })),
     ...overrides,
   };
   return api;
@@ -127,6 +128,42 @@ describe("listening session", () => {
     await expect(session.stop()).rejects.toThrow("too long");
     expect(session.getSnapshot().status).toBe("listening");
     expect(session.getSnapshot().error).toMatch(/try Stop again/);
+  });
+});
+
+describe("whole-transcript sending", () => {
+  it("sends the talk as one reminder request with corrections in context, emails separately", async () => {
+    const api = fakeApi(); const session = createListenSession(api); await session.start();
+    await session.sayAll([
+      "I need to call the dentist tomorrow at 9", "and buy milk on the way home",
+      "actually move the dentist to Friday at 2", "Write an email to Alex", "tell him I'm running late",
+    ]);
+    expect(vi.mocked(api.parse).mock.calls.map(c => c[1])).toEqual([
+      "I need to call the dentist tomorrow at 9. and buy milk on the way home. actually move the dentist to Friday at 2.",
+    ]);
+    expect(vi.mocked(api.email).mock.calls.map(c => c[1])).toEqual(["Write an email to Alex. tell him I'm running late"]);
+  });
+
+  it("does nothing for an empty talk", async () => {
+    const api = fakeApi(); const session = createListenSession(api); await session.start();
+    await session.sayAll(["", "  "]);
+    expect(api.parse).not.toHaveBeenCalled(); expect(api.email).not.toHaveBeenCalled();
+  });
+});
+
+describe("planTranscript", () => {
+  it("splits a long talk between sentences so each request stays small", () => {
+    const sentence = "Remind me to water the plants on Saturday morning before I leave";
+    const plan = planTranscript(Array.from({ length: 40 }, () => sentence));
+    expect(plan.reminders.length).toBeGreaterThan(1);
+    for (const chunk of plan.reminders) { expect(chunk.length).toBeLessThanOrEqual(600); expect(chunk.endsWith(".")).toBe(true); }
+    expect(plan.reminders.join(" ").split(sentence).length - 1).toBe(40);
+  });
+
+  it("keeps an email's follow-on with it and leaves later reminders alone", () => {
+    expect(planTranscript(["email Priya that the deck is ready", "and tell her thanks", "buy stamps"])).toEqual({
+      emails: ["email Priya that the deck is ready. and tell her thanks"], reminders: ["buy stamps."],
+    });
   });
 });
 

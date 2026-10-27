@@ -57,7 +57,7 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
     {notice ? <View style={{ marginBottom: spacing.md }}><Notice tone="success">{notice}</Notice></View> : null}
     <View style={styles.intro}>
       <Text style={[type.heroTitle, { textAlign: "center" }]}>A little less to remember.</Text>
-      <Text style={[type.body, styles.introBody]}>Talk naturally. Heedly catches reminders and changes as you go.</Text>
+      <Text style={[type.body, styles.introBody]}>Talk naturally. When you stop, Heedly turns what you said into reminders.</Text>
     </View>
     <View style={{ alignItems: "center", marginTop: spacing.xl }}>
       <ListenButton onPress={() => navigation.navigate("Listen")} />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupReminders, isOverdue, triggerText, whenText, whereText } from "../src/services/format";
+import { groupReminders, isOverdue, missingInfo, triggerText, whenText, whereText } from "../src/services/format";
 import { Reminder } from "../src/types/reminder";
 
 const now = new Date(2026, 9, 27, 14, 0); // Tue Oct 27 2026, 2 PM local
@@ -50,5 +50,26 @@ describe("groupReminders", () => {
   it("flags overdue only for open reminders", () => {
     expect(isOverdue(r("x", { deadline: at(26, 9) }), now)).toBe(true);
     expect(isOverdue(r("y", { deadline: at(26, 9), completed: true }), now)).toBe(false);
+  });
+});
+
+describe("missingInfo", () => {
+  it("flags a reminder with neither a time nor a place", () => {
+    expect(missingInfo(r("take call"))?.kind).toBe("both");
+  });
+  it("flags a missing time or a missing place for the trigger it has", () => {
+    expect(missingInfo(r("a", { triggerType: "time_and_location", location: { type: "place", name: "UPS" } }))?.kind).toBe("time");
+    expect(missingInfo(r("b", { triggerType: "time_and_location", deadline: at(28, 9) }))?.kind).toBe("place");
+  });
+  it("asks where a saved place is only when the saved list is known and lacks it", () => {
+    const home = r("c", { triggerType: "location", location: { type: "saved_place", name: "home" } });
+    expect(missingInfo(home)).toBeUndefined();
+    expect(missingInfo(home, ["work"])).toMatchObject({ kind: "unknown_place", label: "Where is Home?" });
+    expect(missingInfo(home, ["home"])).toBeUndefined();
+  });
+  it("leaves complete and finished reminders alone", () => {
+    expect(missingInfo(r("d", { deadline: at(28, 9) }))).toBeUndefined();
+    expect(missingInfo(r("e", { triggerType: "location", location: { type: "category", category: "pharmacy" } }))).toBeUndefined();
+    expect(missingInfo(r("f", { completed: true }))).toBeUndefined();
   });
 });

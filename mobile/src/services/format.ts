@@ -62,3 +62,22 @@ export function groupReminders(reminders: Reminder[], now = new Date()): Reminde
   groups.done.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return groups;
 }
+
+export type Missing = { kind: "time" | "place" | "both" | "unknown_place"; label: string; hint: string };
+
+// What a reminder still needs before it can ever fire. `savedPlaces` (lowercase names)
+// enables the "where is home?" check; leave it out when the list isn't loaded.
+export function missingInfo(reminder: Reminder, savedPlaces?: string[]): Missing | undefined {
+  if (reminder.completed) return undefined;
+  const wantsTime = reminder.triggerType !== "location";
+  const wantsPlace = reminder.triggerType !== "time";
+  if (!reminder.deadline && !reminder.location) return { kind: "both", label: "Needs a time or place", hint: "Heedly needs a time or a place to remind you." };
+  if (wantsTime && !reminder.deadline) return { kind: "time", label: "Needs a time", hint: "Add when you want to be reminded." };
+  if (wantsPlace && !reminder.location) return { kind: "place", label: "Needs a place", hint: "Add where you want to be reminded." };
+  const name = reminder.location?.type === "saved_place" ? (reminder.location.name ?? "").toLowerCase() : "";
+  if (name && savedPlaces && !savedPlaces.includes(name)) {
+    const pretty = name.charAt(0).toUpperCase() + name.slice(1);
+    return { kind: "unknown_place", label: `Where is ${pretty}?`, hint: `Heedly doesn't know where ${pretty} is yet. Save it once and this reminder can fire there.` };
+  }
+  return undefined;
+}

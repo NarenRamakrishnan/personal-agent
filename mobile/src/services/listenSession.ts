@@ -22,6 +22,36 @@ export type ListenState = {
 export const isEmailCommand = (text: string) =>
   /\b(write|send|draft|compose|shoot)\b[^.?!]{0,40}\be-?mail\b/i.test(text) || /^\s*e-?mail\s+\w+/i.test(text);
 
+// The follow-on to an email command: "Write an email to Alex." "Tell him I'm late."
+const EMAIL_CONTINUES = /^\s*(tell|say|saying|let|mention|ask|and (tell|say|let|ask))\b/i;
+// One request must finish inside the backend's 12 s budget; four commitments took ~10 s
+// live, so long talks go in small pieces. Later pieces still see the reminders made
+// earlier in the session, so "actually move it to Friday" still works across a split.
+const CHUNK_CHARS = 600;
+
+export type TranscriptPlan = { reminders: string[]; emails: string[] };
+
+// The whole talk, split for sending: email commands (with their follow-on) go to the
+// email drafter, everything else goes to the reminder parser in sentence-aligned chunks.
+export function planTranscript(phrases: string[]): TranscriptPlan {
+  const emails: string[] = []; const rest: string[] = [];
+  const clean = phrases.map(p => p.trim()).filter(Boolean);
+  for (let i = 0; i < clean.length; i++) {
+    if (!isEmailCommand(clean[i])) { rest.push(clean[i]); continue; }
+    let email = clean[i];
+    while (i + 1 < clean.length && EMAIL_CONTINUES.test(clean[i + 1])) email = `${email}. ${clean[++i]}`;
+    emails.push(email);
+  }
+  const reminders: string[] = []; let chunk = "";
+  for (const phrase of rest) {
+    const sentence = /[.!?]$/.test(phrase) ? phrase : `${phrase}.`;
+    if (chunk && chunk.length + sentence.length + 1 > CHUNK_CHARS) { reminders.push(chunk); chunk = ""; }
+    chunk = chunk ? `${chunk} ${sentence}` : sentence;
+  }
+  if (chunk) reminders.push(chunk);
+  return { reminders, emails };
+}
+
 // Kept here instead of importing Controls so this file has no React Native dependency.
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong.";
 
@@ -108,6 +138,14 @@ export function createListenSession(api: SessionApi, now: () => Date = () => new
       const phrase = text.trim();
       if (!phrase || (state.status !== "listening" && state.status !== "starting")) return Promise.resolve();
       return enqueue(phrase, now());
+    },
+    // Send a whole spoken talk at once, so the model sees every correction in context.
+    async sayAll(phrases: string[], capturedAt: Date = now()) {
+      if (state.status !== "listening" && state.status !== "starting") return;
+      const plan = planTranscript(phrases);
+      for (const text of plan.reminders) void enqueue(text, capturedAt);
+      for (const text of plan.emails) void enqueue(text, capturedAt);
+      await queue;
     },
     async stop(): Promise<SessionDetail | undefined> {
       if (state.status !== "listening" && state.status !== "starting") return state.detail;

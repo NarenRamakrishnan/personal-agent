@@ -96,6 +96,20 @@ test("a failed phrase keeps the text and a retry adds it once", async ({ page })
   await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
 });
+test("a reminder with no time or place is flagged with a way to fix it", async ({ page }) => {
+  // The isolated backend's mock parser always adds a time, so hand Review a reminder
+  // the real model can return: no time and no place.
+  await page.route(`${api}/sessions/*/end`, async route => {
+    const detail = await (await route.fetch()).json();
+    detail.reminders = [{ id: "no-time-or-place", title: "take the call", createdAt: new Date().toISOString(), triggerType: "time", completed: false }];
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(detail) });
+  });
+  await typeSession(page, ["take the call"]);
+  await expect(page.getByText("One reminder needs more detail", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs a time or place", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^Add a time or place for / }).click();
+  await expect(page.getByText("Edit reminder", { exact: true })).toBeVisible();
+});
 test("native-only notifications fail clearly in a browser", async ({ page }) => {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Enable reminder notifications", exact: true }).click();

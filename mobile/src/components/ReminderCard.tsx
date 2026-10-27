@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { isOverdue, triggerText, whenText } from "../services/format";
+import { isOverdue, missingInfo, triggerText, whenText } from "../services/format";
 import { colors, radii, spacing, type } from "../theme";
 import { Reminder } from "../types/reminder";
 
@@ -15,6 +15,7 @@ export function reminderMeta(reminder: Reminder, now = new Date()) {
 export function ReminderCard({ reminder, onPress, onToggle, badge }: Props) {
   const meta = reminderMeta(reminder);
   const overdue = isOverdue(reminder);
+  const missing = missingInfo(reminder);
   return (
     <View style={styles.card}>
       {onToggle ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: reminder.completed }} accessibilityLabel={reminder.completed ? `Mark ${reminder.title} as not done` : `Mark ${reminder.title} as done`}
@@ -26,6 +27,7 @@ export function ReminderCard({ reminder, onPress, onToggle, badge }: Props) {
         {badge ? <View style={{ marginBottom: spacing.xxs }}>{badge}</View> : null}
         <Text style={type.cardTitle}>{reminder.title}</Text>
         <Text style={[type.meta, { marginTop: spacing.xxs }, overdue && { color: colors.danger }]}>{meta}</Text>
+        {missing ? <Text style={[type.meta, { color: colors.accent, fontWeight: "600" }]}>{missing.label}</Text> : null}
       </Pressable>
       <Text style={styles.chevron} accessibilityElementsHidden importantForAccessibility="no">›</Text>
     </View>

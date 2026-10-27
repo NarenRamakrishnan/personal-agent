@@ -50,7 +50,7 @@ export default function App() {
         <Stack.Navigator screenOptions={{ headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } }}>
           <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} />}</Stack.Screen>
           <Stack.Screen name="Listen" options={{ title: "" }}>{(props) => <ListenScreen {...props} onSessionEnded={refresh} />}</Stack.Screen>
-          <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} />}</Stack.Screen>
+          <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} onRefresh={refresh} />}</Stack.Screen>
           <Stack.Screen name="Settings" options={{ title: "" }}>{(props) => <SettingsScreen {...props} reminders={reminders} />}</Stack.Screen>
           <Stack.Screen name="Location" component={LocationScreen} options={{ title: "" }} />
           <Stack.Screen name="Email" component={EmailScreen} options={{ title: "" }} />

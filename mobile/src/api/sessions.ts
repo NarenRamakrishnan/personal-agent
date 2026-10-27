@@ -13,6 +13,8 @@ export type SessionApi = {
   parse(sessionId: string, text: string, capturedAt: Date): Promise<ChunkResult>;
   email(sessionId: string, text: string): Promise<EmailAction>;
   end(sessionId: string): Promise<SessionDetail>;
+  // Ask the backend to try again on phrases the model couldn't finish in time.
+  retry(sessionId: string): Promise<SessionDetail>;
 };
 
 // The backend answers 409 when a session already ended (silence or max duration).
@@ -32,6 +34,7 @@ export function createSessionApi(useMocks = USE_MOCKS): SessionApi {
     },
     email: (sessionId, text) => request<EmailAction>("/actions/email", "POST", { text, sessionId, now: new Date().toISOString(), timezone: timezone() }),
     end: sessionId => request<SessionDetail>(`/sessions/${encodeURIComponent(sessionId)}/end`, "POST"),
+    retry: sessionId => request<SessionDetail>(`/sessions/${encodeURIComponent(sessionId)}/retry`, "POST"),
   };
 }
 
@@ -60,6 +63,11 @@ function mockSessionApi(): SessionApi {
       const session = sessions.get(sessionId);
       if (!session) throw new Error("Session not found.");
       session.info = { ...session.info, status: "ended", endedAt: new Date().toISOString(), endReason: "user" };
+      return { ...session.info, reminders: session.reminders, actions: session.actions, pendingChunks: 0, changed: [] };
+    },
+    async retry(sessionId) {
+      const session = sessions.get(sessionId);
+      if (!session) throw new Error("Session not found.");
       return { ...session.info, reminders: session.reminders, actions: session.actions, pendingChunks: 0, changed: [] };
     },
   };
