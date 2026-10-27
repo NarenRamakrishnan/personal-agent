@@ -13,6 +13,11 @@ export const stamp = () => ({ now: new Date().toISOString(), timezone: timezone(
 export const MOCK_REMINDERS_KEY = "context-assistant:mock-reminders:v1";
 const deviceAuth = createDeviceAuth(API_BASE_URL, credentials);
 
+// The server answered and said no. Network failures and timeouts stay plain Errors.
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 export async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   // The shared key is an explicitly configured legacy/demo opt-in, not the default.
   const auth: Record<string, string> = process.env.EXPO_PUBLIC_API_KEY ? { "X-API-Key": process.env.EXPO_PUBLIC_API_KEY } : { Authorization: `Bearer ${await deviceAuth.getToken()}` };
@@ -25,9 +30,9 @@ export async function request<T>(path: string, method = "GET", body?: unknown): 
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
-      if (response.status === 401) throw new Error("Device access was rejected. Your saved identity was kept; check the backend or contact its operator. A new identity would not restore your reminders.");
+      if (response.status === 401) throw new ApiError("Device access was rejected. Your saved identity was kept; check the backend or contact its operator. A new identity would not restore your reminders.", 401);
       const data = await response.json().catch(() => ({}));
-      throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`);
+      throw new ApiError(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`, response.status);
     }
     return response.status === 204 ? undefined as T : await response.json() as T;
   } catch (error) {

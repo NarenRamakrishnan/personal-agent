@@ -47,7 +47,7 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   useEffect(() => {
     session.start().then(() => { if (!typingOnly) void speech.start(); }, () => {});
   }, []);
-  useEffect(() => { if (speech.interim) setLastHeard(speech.interim); }, [speech.interim]);
+  useEffect(() => { if (speech.heard) setLastHeard(speech.heard); }, [speech.heard]);
   useEffect(() => {
     if (speech.status !== "on") return;
     const timer = setInterval(() => setSeconds(value => value + 1), 1000);

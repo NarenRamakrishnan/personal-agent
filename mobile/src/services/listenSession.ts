@@ -81,7 +81,15 @@ export function createListenSession(api: SessionApi, now: () => Date = () => new
         const i = state.unsent.indexOf(text);
         if (i >= 0) set({ unsent: state.unsent.filter((_, j) => j !== i), error: "" });
       }
-      catch (error) { set({ unsent: [...state.unsent, text], error: `${errorMessage(error)} Heedly kept what you said and will try again.` }); }
+      catch (error) {
+        // The server read it and said no (e.g. an email with no message): resending won't help.
+        const status = (error as { status?: unknown }).status;
+        if (typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          set({ error: isEmailCommand(text)
+            ? `Heedly couldn't tell what email to write from "${text}". Say who it's for and what to say in one go.`
+            : `Heedly couldn't use "${text}": ${errorMessage(error)}` });
+        } else set({ unsent: [...state.unsent, text], error: `${errorMessage(error)} Heedly kept what you said and will try again.` });
+      }
       finally { set({ sending: false }); }
     });
     return queue;

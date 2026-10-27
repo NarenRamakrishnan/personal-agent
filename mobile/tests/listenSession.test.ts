@@ -83,6 +83,25 @@ describe("listening session", () => {
     expect(api.end).toHaveBeenCalledWith("s1");
   });
 
+  it("explains a refused email instead of blaming the connection, and does not retry it", async () => {
+    const refused = Object.assign(new Error("That doesn't look like a request to send an email"), { status: 422 });
+    const api = fakeApi({ email: vi.fn().mockRejectedValue(refused) }); const session = createListenSession(api); await session.start();
+    await session.say("Uh write an email to Alex");
+    expect(session.getSnapshot().unsent).toEqual([]);
+    expect(session.getSnapshot().error).toMatch(/couldn't tell what email to write.*who it's for and what to say/);
+    await session.stop();
+    expect(api.email).toHaveBeenCalledTimes(1);
+  });
+
+  it("still keeps phrases for retry on server errors and rate limits", async () => {
+    const parse = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("Parsing is temporarily unavailable"), { status: 503 }))
+      .mockRejectedValueOnce(Object.assign(new Error("Too many requests"), { status: 429 }));
+    const api = fakeApi({ parse }); const session = createListenSession(api); await session.start();
+    await session.say("pay rent"); await session.say("call mom");
+    expect(session.getSnapshot().unsent).toEqual(["pay rent", "call mom"]);
+  });
+
   it("does not resend a failed phrase that was retried by hand", async () => {
     const parse = vi.fn()
       .mockRejectedValueOnce(new Error("Parsing is temporarily unavailable"))

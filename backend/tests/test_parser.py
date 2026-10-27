@@ -259,3 +259,28 @@ def test_deadline_a_few_minutes_ago_is_kept(monkeypatch):
     when = NOW - timedelta(minutes=5)
     out = run(monkeypatch, {"reminders": [{"title": "x", "deadline": when.isoformat(), "triggerType": "time"}]})
     assert out[0].deadline == when
+
+
+# Found with the microphone on 2026-10-27: an errand said "on the way home" was pinned to
+# home instead of a store, and a sentence cut at a breath became its own reminder.
+ERRANDS = [
+    ("I need to buy milk on the way home", {"n": 1, "trigger": "location", "loc_type": "category", "loc_category": "grocery_store"}),
+    ("pick up my prescription on the way back from class", {"n": 1, "loc_type": "category", "loc_category": "pharmacy"}),
+    ("grab some eggs and bread on my way home tonight", {"loc_type": "category", "loc_category": "grocery_store"}),
+    ("remind me to take out the trash when I get home", {"n": 1, "trigger": "location", "loc_type": "saved_place", "loc_name": "home"}),
+    ("feed the cat when I get home", {"n": 1, "loc_type": "saved_place", "loc_name": "home"}),
+    ("take the", {"n": 0}),
+    ("and then I need to", {"n": 0}),
+    ("uh so I was going to", {"n": 0}),
+]
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not os.getenv("NEBIUS_API_KEY"), reason="needs NEBIUS_API_KEY")
+def test_errands_and_fragments_live(monkeypatch):
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    passed, failures = run_live(ERRANDS)
+    print(f"\nerrands/fragments: {passed}/{len(ERRANDS)} passed")
+    for f in failures:
+        print("  FAIL", f)
+    assert passed >= len(ERRANDS) - 1, f"only {passed}/{len(ERRANDS)} passed"

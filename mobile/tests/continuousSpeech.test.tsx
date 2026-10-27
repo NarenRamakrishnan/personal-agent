@@ -31,8 +31,35 @@ it("starts continuous recognition and passes on only final phrases", async () =>
   await act(async () => { emit("start"); emit("result", { isFinal: false, results: [{ transcript: "call the" }] }); });
   expect(hook().interim).toBe("call the"); expect(phrases).toEqual([]);
   await act(async () => { emit("result", { isFinal: true, results: [{ transcript: "call the dentist" }] }); });
-  expect(phrases).toEqual(["call the dentist"]); expect(hook().interim).toBe("");
+  expect(hook().interim).toBe(""); expect(hook().heard).toBe("call the dentist");
+  // Held until the speaker has been quiet for the pause.
+  expect(phrases).toEqual([]);
+  await act(async () => { vi.advanceTimersByTime(2000); });
+  expect(phrases).toEqual(["call the dentist"]); expect(hook().heard).toBe("");
   expect(hook().status).toBe("on");
+  await act(async () => root.unmount());
+});
+
+it("joins a sentence the engine split at a breath into one phrase", async () => {
+  const { root, phrases, hook } = await mount();
+  await act(async () => { await hook().start(); emit("start"); });
+  await act(async () => { emit("result", { isFinal: true, results: [{ transcript: "Uh write an email to Alex" }] }); vi.advanceTimersByTime(1200); });
+  // More words coming in keeps the held part from being sent.
+  await act(async () => { emit("result", { isFinal: false, results: [{ transcript: "saying I'm" }] }); vi.advanceTimersByTime(1500); });
+  expect(phrases).toEqual([]);
+  await act(async () => { emit("result", { isFinal: true, results: [{ transcript: "saying I'm running late" }] }); vi.advanceTimersByTime(2000); });
+  expect(phrases).toEqual(["Uh write an email to Alex saying I'm running late"]);
+  await act(async () => root.unmount());
+});
+
+it("keeps unfinished words across an engine restart and sends them on stop", async () => {
+  const { root, phrases, hook } = await mount();
+  await act(async () => { await hook().start(); emit("start"); });
+  await act(async () => { emit("result", { isFinal: true, results: [{ transcript: "move the dentist" }] }); emit("result", { isFinal: false, results: [{ transcript: "call to Friday" }] }); emit("end"); });
+  expect(phrases).toEqual([]);
+  // Stop while the recognizer is between restarts: the held words still go out.
+  await act(async () => { await hook().stop(); });
+  expect(phrases).toEqual(["move the dentist call to Friday"]);
   await act(async () => root.unmount());
 });
 
