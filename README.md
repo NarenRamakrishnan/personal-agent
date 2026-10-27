@@ -8,6 +8,7 @@ walk past a UPS or when Friday morning comes around.
 Built for the Nebius x NVIDIA Global AI Hackathon. Every model call goes to
 NVIDIA Nemotron 3 Super on Nebius Token Factory.
 
+- **Try it:** https://heedly-nine.vercel.app (voice works in Chrome; any browser can use Type instead)
 - **Live backend:** https://personal-agent-backend.vercel.app
 - **License:** [MIT](LICENSE)
 
