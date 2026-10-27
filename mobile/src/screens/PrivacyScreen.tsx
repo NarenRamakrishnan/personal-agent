@@ -1,39 +1,68 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import { privacyApi } from "../api/actions";
 import { USE_MOCKS } from "../api/client";
-import { AsyncButton, Button, Page } from "../components/Controls";
+import { AsyncButton, Button, Card, Chip, Chips, Notice, Page, ScreenTitle } from "../components/Controls";
 import { PrivacyInfo, PrivacySettings } from "../types/context";
 import { cancelAllNotifications, cancelContextNotifications } from "../services/notifications";
 import { disableBackgroundContext } from "../services/background";
 import { locationPreferenceChanged } from "../services/locationLifecycle";
 import { LOCATION_ENABLED } from "../services/context";
+import { colors, spacing, type } from "../theme";
 
 export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> }) {
   const [info, setInfo] = useState<PrivacyInfo>(); const [settings, setSettings] = useState<PrivacySettings>();
   const [confirm, setConfirm] = useState(false); const [message, setMessage] = useState("");
-  const load = async () => { setInfo(await privacyApi.info()); setSettings(await privacyApi.settings()); };
-  return <Page><Text style={{ fontSize: 28, fontWeight: "700" }}>Privacy & permissions</Text>
-    <Text>{USE_MOCKS ? "Demo mode: reminder data stays in local app storage." : "Connected mode: reviewed commands and saved reminders go to your configured backend."} Local app storage is not an encrypted vault.</Text>
-    {!USE_MOCKS && <Text>{process.env.EXPO_PUBLIC_API_KEY ? "Legacy shared-key mode: every holder of this key shares backend data, including deletion access. Do not use a production shared secret in a public app." : "Private device mode: native tokens use encrypted device storage. Browser tokens use tab-session storage, not an encrypted vault; a new browser session may create a different identity."}</Text>}
-    <Text>Microphone access occurs only while you choose Speak. This app does not retain raw microphone recordings; your device/browser speech service may process audio online. Nearby places sends coordinates to Overpass; reminder evaluation sends them to your backend when location is enabled.</Text>
-    <AsyncButton title="Load backend privacy settings" action={load} />
-    {info && <Text>Backend audio stored: {String(info.audioStored)}. Transcript retention: {info.transcriptRetentionDays} days. Keeps transcripts: {String(info.storeTranscripts)}.</Text>}
-    {settings && <View style={{ gap: 12 }}><Text>Server permits transcripts: {String(settings.serverKeepsTranscripts)}. Server retention limit: {settings.serverRetentionDays} days.</Text>
-      <AsyncButton title="Disable transcript storage & erase retained transcripts" action={async () => { await privacyApi.update({ keepTranscripts: false }); await load(); }} />
-      {!USE_MOCKS && settings.serverKeepsTranscripts && <AsyncButton title="Enable transcript storage" action={async () => { await privacyApi.update({ keepTranscripts: true }); await load(); }} />}
-      {!USE_MOCKS && [1, 7, 30].map(days => <AsyncButton key={days} title={`Keep transcripts for at most ${days} days`} action={async () => { await privacyApi.update({ deleteTranscriptsAfterDays: days }); await load(); }} />)}
-    </View>}
-    <AsyncButton title="Disable location & background tasks" action={async () => { await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged(); await cancelContextNotifications(); await disableBackgroundContext(); setMessage("Location is disabled in this app."); }} />
-    <AsyncButton title="Open device permission settings" action={async () => { await Linking.openSettings(); }} />
-    <Button title="Delete reminder/draft/history data" onPress={() => setConfirm(true)} />
-    {confirm && <View style={{ gap: 12 }}><Text>This permanently deletes all reminder, draft and listening history from the configured backend (or demo reminder storage). Saved places are kept. Proceed?</Text>
-      <AsyncButton title="Confirm permanent history deletion" action={async () => {
-        await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged();
-        await disableBackgroundContext(); await cancelAllNotifications(); await privacyApi.deleteHistory();
-        await AsyncStorage.removeItem("context-notification-ledger"); await onChanged(); setConfirm(false); setMessage("History deleted. Location is disabled; saved places remain.");
-      }} /><Button title="Keep history" onPress={() => setConfirm(false)} /></View>}
-    {message ? <Text>{message}</Text> : null}
+  const [loadError, setLoadError] = useState("");
+  const load = async () => { setLoadError(""); try { setInfo(await privacyApi.info()); setSettings(await privacyApi.settings()); } catch { setLoadError("We couldn't load your privacy settings."); } };
+  useEffect(() => { void load(); }, []);
+  return <Page>
+    <ScreenTitle subtitle="What Heedly keeps, what it doesn't and how to delete it.">Privacy & data</ScreenTitle>
+
+    <Card>
+      <Text style={type.cardTitle}>Microphone & speech</Text>
+      <Text style={type.body}>Heedly doesn't retain raw microphone recordings. The microphone is on only while you choose to listen. Your device or browser speech service may process audio online.</Text>
+      <Text style={type.meta}>{USE_MOCKS ? "Demo mode stores reminder data on this device." : "The words you say and the reminders Heedly saves go to Heedly's backend, kept separate for each device."} Local app storage is not an encrypted vault.</Text>
+      {!USE_MOCKS ? <Text style={type.meta}>{process.env.EXPO_PUBLIC_API_KEY ? "Shared-key mode: everyone with this key shares the same data. Don't use it for a public app." : "Phones keep their private key in encrypted device storage. In a browser it lasts for this tab session, so a new session may start a fresh, empty space."}</Text> : null}
+      <Text style={type.meta}>Location, when on, sends coordinates to Heedly's backend and to OpenStreetMap Overpass for nearby places.</Text>
+    </Card>
+
+    <Card>
+      <Text style={type.cardTitle}>Transcript storage</Text>
+      {loadError ? <Notice tone="danger"><Text style={[type.meta, { color: colors.danger }]}>{loadError}</Text><Button title="Try again" variant="secondary" compact onPress={() => { void load(); }} /></Notice> : null}
+      {info ? <Text style={type.meta}>Audio stored on the server: {info.audioStored ? "yes" : "no"}. Transcripts kept: {info.storeTranscripts ? `yes, up to ${info.transcriptRetentionDays} days` : "no"}.</Text> : !loadError ? <Text style={type.meta}>Loading…</Text> : null}
+      {settings ? <View style={{ gap: spacing.xs }}>
+        {settings.keepTranscripts
+          ? <AsyncButton title="Turn off transcript storage and erase kept transcripts" variant="secondary" compact action={async () => { await privacyApi.update({ keepTranscripts: false }); await load(); }} />
+          : !USE_MOCKS && settings.serverKeepsTranscripts ? <AsyncButton title="Keep transcripts so I can check what was heard" variant="secondary" compact action={async () => { await privacyApi.update({ keepTranscripts: true }); await load(); }} /> : <Text style={type.meta}>Transcripts are off.</Text>}
+        {!USE_MOCKS && settings.keepTranscripts ? <>
+          <Text style={type.fieldLabel}>Delete transcripts after</Text>
+          <Chips>{[1, 7, 30].map(days => <Chip key={days} label={`${days} ${days === 1 ? "day" : "days"}`} selected={settings.deleteTranscriptsAfterDays === days}
+            onPress={() => { void privacyApi.update({ deleteTranscriptsAfterDays: days }).then(load); }} />)}</Chips>
+        </> : null}
+      </View> : null}
+    </Card>
+
+    <Card>
+      <Text style={type.cardTitle}>Permissions</Text>
+      <AsyncButton title="Turn off location and background checks" variant="secondary" compact action={async () => { await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged(); await cancelContextNotifications(); await disableBackgroundContext(); setMessage("Location is off in Heedly."); }} />
+      <AsyncButton title="Open device permission settings" variant="ghost" compact action={async () => { await Linking.openSettings(); }} />
+    </Card>
+
+    {message ? <Notice tone="success">{message}</Notice> : null}
+
+    {!confirm ? <Button title="Delete reminders, drafts & history" variant="dangerGhost" onPress={() => setConfirm(true)} />
+      : <Notice tone="danger" title="Delete reminders, drafts & history?">
+        <Text style={[type.body, { color: colors.danger }]}>This permanently deletes those records from Heedly's backend (or demo storage). Location will turn off. Saved places will remain.</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+          <Button title="Keep my data" variant="secondary" compact onPress={() => setConfirm(false)} />
+          <AsyncButton title="Delete data" variant="danger" compact accessibilityLabel="Confirm permanent history deletion" action={async () => {
+            await AsyncStorage.setItem(LOCATION_ENABLED, "false"); locationPreferenceChanged();
+            await disableBackgroundContext(); await cancelAllNotifications(); await privacyApi.deleteHistory();
+            await AsyncStorage.removeItem("context-notification-ledger"); await onChanged(); setConfirm(false); setMessage("Data deleted. Location is off. Saved places remain.");
+          }} />
+        </View>
+      </Notice>}
   </Page>;
 }

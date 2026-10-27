@@ -8,7 +8,7 @@ const run = promisify(execFile);
 const serial = process.env.PERSON2_ADB_SERIAL ?? "emulator-5554";
 if (!/^emulator-\d+$/.test(serial)) throw new Error("This test refuses physical-device serials.");
 const bridge = join(process.env.ANDROID_HOME ?? join(homedir(), "Library/Android/sdk"), "platform-tools/adb");
-const pkg = "com.contextassistant.emulatortest";
+const pkg = "com.heedly.emulatortest";
 const delaySeconds = Number(process.env.PERSON2_TIMER_SECONDS ?? 120);
 if (!Number.isInteger(delaySeconds) || delaySeconds < 30 || delaySeconds > 180) throw new Error("Timer must be between 30 and 180 seconds.");
 const adb = async (...args) => {
@@ -54,7 +54,7 @@ async function dismissDeveloperMenu() {
   if ((await screen()).some(node => node["content-desc"] === "Close" || node.text === "Close")) await tap("Close");
 }
 await adb("reverse", "tcp:8081", "tcp:8081");
-await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+context-aware-personal-assistant://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
+await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+heedly://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
 await dismissDeveloperMenu();
 await assertText("Your reminders");
 if (process.argv.includes("--check-restart")) {
@@ -98,7 +98,7 @@ console.log(`PASS: Android posted the timed notification while the app was backg
 await adb("shell", "cmd", "statusbar", "collapse");
 await adb("shell", "am", "force-stop", pkg);
 await adb("reverse", "tcp:8081", "tcp:8081");
-await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+context-aware-personal-assistant://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
+await adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "exp+heedly://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081", pkg);
 await dismissDeveloperMenu();
 await assertText(title); console.log("PASS: native device identity and reminder survived app restart.");
 console.log("Microphone, real geofence travel, battery and iOS behavior are not verified by this test.");

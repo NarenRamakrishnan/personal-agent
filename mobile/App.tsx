@@ -1,15 +1,18 @@
-import { NavigationContainer } from "@react-navigation/native";
+import { DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { reminderApi } from "./src/api/client";
 import { errorMessage } from "./src/components/Controls";
 import { cancelReminderNotification, listenForNotificationActions, reconcileNotifications } from "./src/services/notifications";
-import { AddReminderScreen } from "./src/screens/AddReminderScreen";
 import { ConfirmReminderScreen } from "./src/screens/ConfirmReminderScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { ListenScreen } from "./src/screens/ListenScreen";
 import { ReminderDetailScreen } from "./src/screens/ReminderDetailScreen";
+import { ReviewScreen } from "./src/screens/ReviewScreen";
+import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { RootStackParamList } from "./src/navigation/types";
 import { Reminder } from "./src/types/reminder";
 import { LocationScreen } from "./src/screens/LocationScreen";
@@ -18,8 +21,10 @@ import { PrivacyScreen } from "./src/screens/PrivacyScreen";
 import { syncBackgroundRegions } from "./src/services/background";
 import { watchForegroundContext } from "./src/services/locationLifecycle";
 import { createReminderStore } from "./src/services/reminderStore";
+import { colors } from "./src/theme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navTheme = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.background, card: colors.background, text: colors.textPrimary, primary: colors.brandGreen, border: colors.border } };
 
 export default function App() {
   const [store] = useState(() => createReminderStore(reminderApi));
@@ -34,22 +39,26 @@ export default function App() {
   useEffect(() => { if (loaded) void syncBackgroundRegions().catch(e => setError(errorMessage(e))); }, [reminders, loaded]);
   const addReminder = store.add;
   const update = store.update;
-  const completeReminder = (id: string) => update(id, { completed: true });
+  const setCompleted = (id: string, completed: boolean) => update(id, { completed });
   const deleteReminder = async (id: string) => { await store.remove(id); await cancelReminderNotification(id); };
   const snoozeReminder = (id: string, snoozedUntil: string) => update(id, { snoozedUntil });
 
   return (
-    <NavigationContainer>
-      <StatusBar style="dark" />
-      <Stack.Navigator screenOptions={{ headerShown: true, headerTintColor: "#18212F", headerShadowVisible: false, headerStyle: { backgroundColor: "#F7F8FA" }, contentStyle: { backgroundColor: "#F7F8FA" } }}>
-        <Stack.Screen name="Home" options={{ headerShown: false }}>{(props) => <HomeScreen {...props} reminders={reminders} onRefresh={refresh} refreshing={refreshing} error={error} />}</Stack.Screen>
-        <Stack.Screen name="AddReminder" component={AddReminderScreen} options={{ title: "" }} />
-        <Stack.Screen name="Location" component={LocationScreen} options={{ title: "Location" }} />
-        <Stack.Screen name="Email" component={EmailScreen} options={{ title: "Email draft" }} />
-        <Stack.Screen name="Privacy" options={{ title: "Privacy" }}>{() => <PrivacyScreen onChanged={refresh} />}</Stack.Screen>
-        <Stack.Screen name="ConfirmReminder" options={{ title: "" }}>{(props) => <ConfirmReminderScreen {...props} onSave={addReminder} />}</Stack.Screen>
-        <Stack.Screen name="ReminderDetail" options={{ title: "" }}>{(props) => <ReminderDetailScreen {...props} reminders={reminders} onComplete={completeReminder} onDelete={deleteReminder} onSnooze={snoozeReminder} />}</Stack.Screen>
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer theme={navTheme} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
+        <StatusBar style="dark" />
+        <Stack.Navigator screenOptions={{ headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } }}>
+          <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} />}</Stack.Screen>
+          <Stack.Screen name="Listen" options={{ title: "" }}>{(props) => <ListenScreen {...props} onSessionEnded={refresh} />}</Stack.Screen>
+          <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} />}</Stack.Screen>
+          <Stack.Screen name="Settings" options={{ title: "" }}>{(props) => <SettingsScreen {...props} reminders={reminders} />}</Stack.Screen>
+          <Stack.Screen name="Location" component={LocationScreen} options={{ title: "" }} />
+          <Stack.Screen name="Email" component={EmailScreen} options={{ title: "" }} />
+          <Stack.Screen name="Privacy" options={{ title: "" }}>{() => <PrivacyScreen onChanged={refresh} />}</Stack.Screen>
+          <Stack.Screen name="ConfirmReminder" options={{ title: "" }}>{(props) => <ConfirmReminderScreen {...props} onSave={addReminder} onUpdate={update} />}</Stack.Screen>
+          <Stack.Screen name="ReminderDetail" options={{ title: "" }}>{(props) => <ReminderDetailScreen {...props} reminders={reminders} onComplete={setCompleted} onDelete={deleteReminder} onSnooze={snoozeReminder} />}</Stack.Screen>
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

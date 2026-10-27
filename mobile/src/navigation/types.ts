@@ -1,11 +1,14 @@
+import { SessionDetail } from "../api/sessions";
 import { ParsedReminder, Reminder } from "../types/reminder";
 
 export type RootStackParamList = {
-  Home: undefined;
+  Home: { notice?: string } | undefined;
+  Listen: { typing?: boolean } | undefined;
+  Review: { detail: SessionDetail; unsent?: string[] };
+  Settings: undefined;
   Location: undefined;
   Privacy: undefined;
-  Email: { text?: string } | undefined;
-  AddReminder: undefined;
-  ConfirmReminder: { parsed: ParsedReminder };
+  Email: { text?: string; draftId?: string } | undefined;
+  ConfirmReminder: { parsed: ParsedReminder; existing?: Reminder };
   ReminderDetail: { reminder: Reminder };
 };

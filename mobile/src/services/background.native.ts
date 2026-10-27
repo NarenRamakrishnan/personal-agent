@@ -48,7 +48,7 @@ export async function enableBackgroundContext() {
     await syncBackgroundRegions();
     if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") return;
     await Location.startLocationUpdatesAsync(UPDATES, { accuracy: Location.Accuracy.Balanced, distanceInterval: 200, timeInterval: 120000, deferredUpdatesDistance: 200, deferredUpdatesInterval: 120000, pausesUpdatesAutomatically: true, showsBackgroundLocationIndicator: true,
-      ...(Platform.OS === "android" ? { foregroundService: { notificationTitle: "Location reminders active", notificationBody: "Context Assistant checks places as you move." } } : {}) });
+      ...(Platform.OS === "android" ? { foregroundService: { notificationTitle: "Location reminders active", notificationBody: "Heedly checks places as you move." } } : {}) });
     if (await AsyncStorage.getItem(BACKGROUND_ENABLED) !== "true") await disableBackgroundContext();
   } catch (e) { await disableBackgroundContext(); throw e; }
 }

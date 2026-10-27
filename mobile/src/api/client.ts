@@ -4,8 +4,10 @@ import { EvalContext, Evaluation, SavedPlace } from "../types/context";
 import { mockReminders } from "../data/mockReminders";
 import { credentials } from "../services/credentials";
 import { createDeviceAuth } from "./deviceAuth";
-export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
-export const USE_MOCKS = process.env.EXPO_PUBLIC_USE_MOCKS !== "false";
+// The hosted Heedly backend is the default; local development overrides it in mobile/.env.
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || "https://personal-agent-backend.vercel.app").replace(/\/$/, "");
+// Sample data only when asked for. A real install should never show fake reminders.
+export const USE_MOCKS = process.env.EXPO_PUBLIC_USE_MOCKS === "true";
 export const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 export const stamp = () => ({ now: new Date().toISOString(), timezone: timezone() });
 export const MOCK_REMINDERS_KEY = "context-assistant:mock-reminders:v1";

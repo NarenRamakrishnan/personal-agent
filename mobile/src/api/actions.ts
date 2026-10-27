@@ -7,6 +7,12 @@ export const actionsApi = {
     if (!USE_MOCKS) return request("/actions/email", "POST", { text, ...stamp() });
     return { id: `mock-email-${Date.now()}`, type: "email", status: "needs_approval", createdAt: new Date().toISOString(), email: { toName: "Alex", subject: "Running late", body: "Hi Alex, I'll be 10 minutes late." } };
   },
+  // Drafts still waiting for the person to look at them. Demo mode has none saved.
+  async pending(): Promise<EmailAction[]> {
+    if (USE_MOCKS) return [];
+    return (await request<EmailAction[]>("/actions")).filter(action => action.status === "needs_approval");
+  },
+  async get(id: string): Promise<EmailAction> { return request(`/actions/${encodeURIComponent(id)}`); },
   async edit(id: string, email: EmailAction["email"]): Promise<void> { if (!USE_MOCKS) await request(`/actions/${encodeURIComponent(id)}`, "PATCH", email); },
   async approve(id: string): Promise<void> { if (!USE_MOCKS) await request(`/actions/${encodeURIComponent(id)}/approve`, "POST"); },
   async cancel(id: string): Promise<void> { if (!USE_MOCKS) await request(`/actions/${encodeURIComponent(id)}/cancel`, "POST"); },

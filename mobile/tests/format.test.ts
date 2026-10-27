@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import { groupReminders, isOverdue, triggerText, whenText, whereText } from "../src/services/format";
+import { Reminder } from "../src/types/reminder";
+
+const now = new Date(2026, 9, 27, 14, 0); // Tue Oct 27 2026, 2 PM local
+const at = (day: number, hour: number) => new Date(2026, 9, day, hour, 0).toISOString();
+const r = (id: string, extra: Partial<Reminder> = {}): Reminder => ({ id, title: id, createdAt: at(26, 9), triggerType: "time", completed: false, ...extra });
+
+describe("whenText", () => {
+  it("names today, tomorrow and yesterday", () => {
+    expect(whenText(at(27, 17), now)).toMatch(/^Today, 5:00/);
+    expect(whenText(at(28, 9), now)).toMatch(/^Tomorrow, 9:00/);
+    expect(whenText(at(26, 9), now)).toMatch(/^Yesterday, 9:00/);
+  });
+  it("uses a short date further out and the year only when it differs", () => {
+    // Device locale decides "Oct 30" vs "30 Oct", so check the parts.
+    expect(whenText(at(30, 14), now)).toMatch(/Oct/);
+    expect(whenText(at(30, 14), now)).toMatch(/\b30\b/);
+    expect(whenText(at(30, 14), now)).not.toMatch(/2026/);
+    expect(whenText(new Date(2027, 0, 5, 9).toISOString(), now)).toMatch(/2027/);
+  });
+  it("returns nothing for a bad date", () => { expect(whenText("not a date", now)).toBe(""); });
+});
+
+describe("whereText and triggerText", () => {
+  it("reads categories, saved places and named places like a person would", () => {
+    expect(whereText({ type: "category", category: "grocery_store" })).toBe("near a grocery store");
+    expect(whereText({ type: "category", category: "bike_shop" })).toBe("near bike shop");
+    expect(whereText({ type: "saved_place", name: "home" })).toBe("at Home");
+    expect(whereText({ type: "place", name: "Target" })).toBe("at Target");
+  });
+  it("combines time and place, or falls back to one of them", () => {
+    expect(triggerText(r("a", { deadline: at(28, 9), location: { type: "place", name: "UPS" } }), now)).toMatch(/^Tomorrow, 9:00.* · at UPS$/);
+    expect(triggerText(r("b", { location: { type: "category", category: "pharmacy" } }), now)).toBe("When you're near a pharmacy");
+    expect(triggerText(r("c"), now)).toBe("No time or place");
+  });
+});
+
+describe("groupReminders", () => {
+  it("puts overdue and due-today under today, later under upcoming, place-only under place", () => {
+    const groups = groupReminders([
+      r("later", { deadline: at(29, 9) }), r("tonight", { deadline: at(27, 20) }), r("overdue", { deadline: at(26, 9) }),
+      r("milk", { location: { type: "category", category: "grocery_store" }, triggerType: "location" }), r("done", { completed: true, deadline: at(27, 9) }),
+    ], now);
+    expect(groups.today.map(x => x.id)).toEqual(["overdue", "tonight"]);
+    expect(groups.upcoming.map(x => x.id)).toEqual(["later"]);
+    expect(groups.place.map(x => x.id)).toEqual(["milk"]);
+    expect(groups.done.map(x => x.id)).toEqual(["done"]);
+  });
+  it("flags overdue only for open reminders", () => {
+    expect(isOverdue(r("x", { deadline: at(26, 9) }), now)).toBe(true);
+    expect(isOverdue(r("y", { deadline: at(26, 9), completed: true }), now)).toBe(false);
+  });
+});

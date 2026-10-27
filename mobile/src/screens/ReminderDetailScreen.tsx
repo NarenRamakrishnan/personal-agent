@@ -1,23 +1,80 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { Badge, Button, Card, Chip, Chips, Notice, Page } from "../components/Controls";
 import { RootStackParamList } from "../navigation/types";
+import { isOverdue, triggerText, whenText, whereText } from "../services/format";
+import { timezoneLabel } from "../services/humanDate";
+import { colors, spacing, type } from "../theme";
 import { Reminder } from "../types/reminder";
-import { AsyncButton, Button, Page } from "../components/Controls";
-type Props = NativeStackScreenProps<RootStackParamList, "ReminderDetail"> & { reminders: Reminder[]; onComplete: (id: string) => Promise<void>; onDelete: (id: string) => Promise<void>; onSnooze: (id: string, until: string) => Promise<void> };
+
+type Props = NativeStackScreenProps<RootStackParamList, "ReminderDetail"> & {
+  reminders: Reminder[];
+  onComplete: (id: string, completed: boolean) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  onSnooze: (id: string, until: string) => Promise<void>;
+};
+
+function Row({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  return <View style={styles.row}>
+    <Text style={type.fieldLabel}>{label}</Text>
+    <Text style={type.body}>{value}</Text>
+    {detail ? <Text style={type.meta}>{detail}</Text> : null}
+  </View>;
+}
+
 export function ReminderDetailScreen({ navigation, route, reminders, onComplete, onDelete, onSnooze }: Props) {
   const reminder = reminders.find(r => r.id === route.params.reminder.id) ?? route.params.reminder;
-  const [deleting, setDeleting] = useState(false);
-  return <Page><Text style={{ fontSize: 28, fontWeight: "700" }}>{reminder.title}</Text>
-    <Text>{reminder.completed ? "Completed" : "Active"}</Text><Text>{reminder.description}</Text>
-    <Text>Deadline: {reminder.deadline ? new Date(reminder.deadline).toLocaleString() : "None"}</Text>
-    <Text>Trigger: {reminder.triggerType}</Text><Text>Location: {reminder.location?.name ?? reminder.location?.category ?? "None"}</Text>
-    <Text>Snoozed until: {reminder.snoozedUntil ? new Date(reminder.snoozedUntil).toLocaleString() : "Not snoozed"}</Text>
-    {!reminder.completed && <View style={{ gap: 12 }}><AsyncButton title="Mark complete" action={() => onComplete(reminder.id)} />
-      {[10, 60].map(minutes => <AsyncButton key={minutes} title={`Snooze ${minutes} minutes`} action={() => onSnooze(reminder.id, new Date(Date.now() + minutes * 60000).toISOString())} />)}
-      <AsyncButton title="Snooze until tomorrow at 9 AM" action={() => { const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0); return onSnooze(reminder.id, tomorrow.toISOString()); }} />
-    </View>}
-    <Button title="Delete reminder" onPress={() => setDeleting(true)} />
-    {deleting && <View style={{ gap: 10 }}><Text>Delete this reminder permanently?</Text><AsyncButton title="Confirm delete" action={async () => { await onDelete(reminder.id); navigation.popToTop(); }} /><Button title="Keep reminder" onPress={() => setDeleting(false)} /></View>}
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const run = async (key: string, action: () => Promise<void>, after?: () => void) => {
+    setBusy(key); setError("");
+    try { await action(); after?.(); } catch (e) { setError(e instanceof Error ? e.message : "Something went wrong. Try again."); } finally { setBusy(""); }
+  };
+  const snoozeTo = (label: string, build: () => Date) => <Chip key={label} label={label} action accessibilityLabel={`Snooze ${label}`}
+    onPress={() => { void run(`snooze-${label}`, () => onSnooze(reminder.id, build().toISOString())); }} />;
+  const snoozed = reminder.snoozedUntil && Date.parse(reminder.snoozedUntil) > Date.now();
+  const place = whereText(reminder.location);
+
+  const footer = <Button title={reminder.completed ? "Mark as active" : "Mark done"} busy={busy === "complete"}
+    onPress={() => { void run("complete", () => onComplete(reminder.id, !reminder.completed)); }} />;
+
+  return <Page footer={footer}>
+    <View style={{ gap: spacing.xs }}>
+      <Badge label={reminder.completed ? "Completed" : isOverdue(reminder) ? "Overdue" : "Active"} tone={reminder.completed ? "completed" : isOverdue(reminder) ? "error" : "new"} />
+      <Text accessibilityRole="header" style={type.screenTitle}>{reminder.title}</Text>
+      {reminder.description ? <Text style={[type.body, { color: colors.textSecondary }]}>{reminder.description}</Text> : null}
+    </View>
+    {error ? <Notice tone="danger">{error}</Notice> : null}
+    <Card style={{ gap: spacing.md }}>
+      <Row label="Remind me" value={reminder.location && !reminder.deadline ? `When you're ${place}` : triggerText(reminder)} />
+      {reminder.deadline ? <Row label="When" value={new Date(reminder.deadline).toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} detail={timezoneLabel(new Date(reminder.deadline))} /> : null}
+      {place ? <Row label="Place" value={place.charAt(0).toUpperCase() + place.slice(1)} detail={reminder.location?.radiusMeters ? `Within ${reminder.location.radiusMeters} meters` : undefined} /> : null}
+      {snoozed ? <Row label="Snoozed until" value={whenText(reminder.snoozedUntil!)} /> : null}
+    </Card>
+    <Button title="Edit reminder" variant="secondary" onPress={() => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: reminder.title, deadline: reminder.deadline, triggerType: reminder.triggerType, location: reminder.location }, existing: reminder })} />
+    {!reminder.completed ? <View style={{ gap: spacing.xs }}>
+      <Text accessibilityRole="header" style={type.sectionTitle}>Snooze</Text>
+      <Chips>
+        {snoozeTo("10 minutes", () => new Date(Date.now() + 10 * 60000))}
+        {snoozeTo("1 hour", () => new Date(Date.now() + 60 * 60000))}
+        {snoozeTo("Tomorrow at 9", () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })}
+      </Chips>
+      {busy.startsWith("snooze") ? <Text style={type.meta}>Snoozing…</Text> : null}
+    </View> : null}
+    {!confirmDelete ? <Button title="Delete reminder" variant="dangerGhost" onPress={() => setConfirmDelete(true)} />
+      : <Notice tone="danger" title="Delete reminder?">
+        <Text style={[type.body, { color: colors.danger }]}>This reminder will be permanently deleted.</Text>
+        <View style={styles.actions}>
+          <Button title="Keep reminder" variant="secondary" compact onPress={() => setConfirmDelete(false)} />
+          <Button title="Delete reminder" variant="danger" compact busy={busy === "delete"} accessibilityLabel="Confirm delete" onPress={() => { void run("delete", () => onDelete(reminder.id), () => navigation.popToTop()); }} />
+        </View>
+      </Notice>}
   </Page>;
 }
+
+const styles = StyleSheet.create({
+  row: { gap: spacing.xxs },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+});

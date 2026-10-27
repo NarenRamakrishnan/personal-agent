@@ -1,32 +1,43 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { isOverdue, triggerText, whenText } from "../services/format";
+import { colors, radii, spacing, type } from "../theme";
 import { Reminder } from "../types/reminder";
 
-type Props = { reminder: Reminder; onPress: () => void };
+type Props = { reminder: Reminder; onPress: () => void; onToggle?: () => void; badge?: React.ReactNode };
 
-export function ReminderCard({ reminder, onPress }: Props) {
-  const location = reminder.location?.name ?? reminder.location?.category;
+export function reminderMeta(reminder: Reminder, now = new Date()) {
+  if (reminder.completed) return "Completed";
+  if (reminder.snoozedUntil && Date.parse(reminder.snoozedUntil) > now.getTime()) return `Snoozed until ${whenText(reminder.snoozedUntil, now)}`;
+  const text = triggerText(reminder, now);
+  return isOverdue(reminder, now) ? `Overdue · ${text}` : text;
+}
+
+export function ReminderCard({ reminder, onPress, onToggle, badge }: Props) {
+  const meta = reminderMeta(reminder);
+  const overdue = isOverdue(reminder);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open reminder: ${reminder.title}`} onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <View style={[styles.checkbox, reminder.completed && styles.checkboxCompleted]}>
-        {reminder.completed && <Text style={styles.checkmark}>✓</Text>}
-      </View>
-      <View style={styles.content}>
-        <Text style={[styles.title, reminder.completed && styles.completedText]}>{reminder.title}</Text>
-        {reminder.deadline && <Text style={styles.meta}>{new Date(reminder.deadline).toLocaleString()}</Text>}
-        {location && <Text style={styles.meta}>{location}</Text>}
-      </View>
-    </Pressable>
+    <View style={styles.card}>
+      {onToggle ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: reminder.completed }} accessibilityLabel={reminder.completed ? `Mark ${reminder.title} as not done` : `Mark ${reminder.title} as done`}
+        onPress={onToggle} hitSlop={4} style={styles.target}>
+        <View style={[styles.circle, reminder.completed && styles.circleDone]}>{reminder.completed ? <Text style={styles.check}>✓</Text> : null}</View>
+      </Pressable> : null}
+      <Pressable accessibilityRole="button" accessibilityLabel={`Open reminder: ${reminder.title}`} accessibilityHint={meta} onPress={onPress}
+        style={({ pressed }) => [styles.content, pressed && { backgroundColor: colors.surfaceSubtle }]}>
+        {badge ? <View style={{ marginBottom: spacing.xxs }}>{badge}</View> : null}
+        <Text style={type.cardTitle}>{reminder.title}</Text>
+        <Text style={[type.meta, { marginTop: spacing.xxs }, overdue && { color: colors.danger }]}>{meta}</Text>
+      </Pressable>
+      <Text style={styles.chevron} accessibilityElementsHidden importantForAccessibility="no">›</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12 },
-  pressed: { opacity: 0.7 },
-  checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: "#A6B0BF", marginRight: 12, alignItems: "center", justifyContent: "center" },
-  checkboxCompleted: { backgroundColor: "#377D6A", borderColor: "#377D6A" },
-  checkmark: { color: "#FFFFFF", fontWeight: "700" },
-  content: { flex: 1 },
-  title: { color: "#18212F", fontSize: 16, fontWeight: "600" },
-  completedText: { color: "#8A94A3", textDecorationLine: "line-through" },
-  meta: { color: "#697586", fontSize: 13, marginTop: 4 },
+  card: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: radii.card, borderWidth: 1, borderColor: colors.border, minHeight: 88, marginBottom: spacing.sm, overflow: "hidden" },
+  target: { width: 56, alignSelf: "stretch", alignItems: "center", justifyContent: "center", paddingLeft: spacing.xs },
+  circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.controlBorder, alignItems: "center", justifyContent: "center" },
+  circleDone: { backgroundColor: colors.brandGreen, borderColor: colors.brandGreen },
+  check: { color: colors.cream, fontWeight: "700", fontSize: 14, lineHeight: 16 },
+  content: { flex: 1, alignSelf: "stretch", justifyContent: "center", paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
+  chevron: { fontSize: 24, color: colors.textSecondary, paddingRight: spacing.md },
 });

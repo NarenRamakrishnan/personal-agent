@@ -13,12 +13,19 @@ NVIDIA Nemotron 3 Super on Nebius Token Factory.
 
 ## How it works
 
-1. The phone's speech service recognizes the command; it may process audio online.
-   Only the resulting text is sent to this app's backend.
-2. The backend asks Nemotron to pull out commitments: what to do, when and where.
-3. Each reminder is stored with a time trigger, a place trigger or both.
-4. The app schedules notifications and geofences, so the reminder fires when you are
-   near the place or when the time comes.
+1. Tap **Listen** and talk normally. The phone's speech service turns each phrase into
+   text (it may process audio online); only that text reaches this app's backend.
+   **Type instead** does the same thing without a microphone.
+2. Each phrase goes to Nemotron with your open reminders, so it can create new
+   reminders ("call the dentist tomorrow at 9"), change one ("move the dentist to
+   Friday"), finish one ("I already got the milk") or draft an email ("write Alex that
+   I'm running late"). Reminders save as you go; the screen shows what was caught.
+3. Tap **Stop & review** for one list of everything new, updated and completed, plus
+   email drafts. Fix or delete anything, then tap Done. Email is never sent for you:
+   approving a draft only opens it in your mail app.
+4. Each reminder has a time trigger, a place trigger or both. The app schedules
+   notifications and geofences, so it fires when the time comes or you are near the
+   place.
 
 This backend never receives raw audio. Apple, Google or the browser's speech service
 may process audio remotely; on-device-only recognition is not enforced. Saved reminders
@@ -63,16 +70,17 @@ Needs Node 22.
 
 ```bash
 cd mobile
-cp .env.example .env
 npm ci
 npm run web
 ```
 
-`EXPO_PUBLIC_USE_MOCKS=true` runs the app on sample data. Set it to `false` and point
-`EXPO_PUBLIC_API_URL` at your backend to use real parsing. On a physical phone, use
-your computer's LAN address instead of localhost. Restart Expo after changing `.env`.
+With no `.env`, the app talks to the hosted backend
+(`https://personal-agent-backend.vercel.app`) with real Nemotron parsing. To use your
+own backend, copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_URL` (on a physical
+phone, use your computer's LAN address instead of localhost). `EXPO_PUBLIC_USE_MOCKS=true`
+runs on sample data with no backend. Restart Expo after changing `.env`.
 
-Hosted backend: `https://personal-agent-backend.vercel.app`. Leave
+Voice in the browser needs a browser with speech recognition, such as Chrome. Leave
 `EXPO_PUBLIC_API_KEY` blank: connected mode automatically registers a private device
 and sends its token. Native tokens use encrypted SecureStore; browser tokens last
 only for the tab session. Closing a browser session can mean a new identity next time.
@@ -100,4 +108,5 @@ To try it without a phone, see the [phone-free testing guide](docs/person2-phone
 
 ## Team
 
-Naren Ramakrishnan (mobile app) and Mihir Kolakaluri (backend and AI).
+Naren Ramakrishnan (mobile platform: notifications, location, device auth) and
+Mihir Kolakaluri (backend, AI and the listening and review experience).
