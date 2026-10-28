@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("../src/services/credentials", () => ({ credentials: { get: async () => "test-device-token", set: vi.fn() } }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}) } }));
-import { SessionApi, SessionEndedError } from "../src/api/sessions";
+import { SessionApi, SessionEndedError, SessionInfo } from "../src/api/sessions";
 import { createListenSession, isEmailCommand, planTranscript } from "../src/services/listenSession";
 import { Reminder } from "../src/types/reminder";
 
@@ -128,6 +128,31 @@ describe("listening session", () => {
     await expect(session.stop()).rejects.toThrow("too long");
     expect(session.getSnapshot().status).toBe("listening");
     expect(session.getSnapshot().error).toMatch(/try Stop again/);
+  });
+});
+
+describe("starting", () => {
+  it("words typed while the session is still starting go into that session, not a second one", async () => {
+    let open!: () => void;
+    const api = fakeApi({ start: vi.fn(() => new Promise<SessionInfo>(done => { open = () => done({ id: "s1", status: "listening" as const, startedAt: "", lastActivityAt: "" }); })) });
+    const session = createListenSession(api);
+    const started = session.start();
+    const said = session.say("call the dentist tomorrow at 9");
+    open(); await started; await said;
+    expect(api.start).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.parse).mock.calls.map(c => c[0])).toEqual(["s1"]);
+    await session.stop();
+    expect(api.end).toHaveBeenCalledWith("s1");
+  });
+
+  it("stopping while the session is still starting waits for it and ends it", async () => {
+    let open!: () => void;
+    const api = fakeApi({ start: vi.fn(() => new Promise<SessionInfo>(done => { open = () => done({ id: "s1", status: "listening" as const, startedAt: "", lastActivityAt: "" }); })) });
+    const session = createListenSession(api);
+    void session.start();
+    const stopped = session.stop();
+    open();
+    expect((await stopped)?.id).toBe("s1");
   });
 });
 

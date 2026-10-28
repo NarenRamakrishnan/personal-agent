@@ -61,7 +61,13 @@ export default function App() {
   const [preference, setPreferenceState] = useState<AppearancePreference>("system");
   useEffect(() => { void loadAppearance().then(setPreferenceState); }, []);
   const appearance = useMemo(() => ({ preference, setPreference: (next: AppearancePreference) => { setPreferenceState(next); void saveAppearance(next); } }), [preference]);
-  const scheme = resolveScheme(preference, useColorScheme());
+  const wanted = resolveScheme(preference, useColorScheme());
+  // A new look remounts the screens. Never mid-session: if the device turns dark while
+  // someone is listening, the switch waits until they leave the listening screen.
+  const [route, setRoute] = useState<string>();
+  const shown = useRef(wanted);
+  if (route !== "Listen") shown.current = wanted;
+  const scheme = shown.current;
   applyScheme(scheme);
   const navState = useRef<NavigationState | undefined>(undefined);
   const navTheme = useMemo(() => {
@@ -72,7 +78,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppearanceContext.Provider value={appearance}>
-      <NavigationContainer key={scheme} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state; }} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
+      <NavigationContainer key={scheme} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state; setRoute(state?.routes[state.index]?.name); }} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <Stack.Navigator screenOptions={({ navigation }) => ({ ...(Platform.OS === "web" ? { headerLeft: ({ canGoBack }: { canGoBack?: boolean }) => canGoBack ? <WebBack onPress={() => navigation.goBack()} /> : null } : null), headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } })}>
           <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} onSnooze={snoozeReminder} onRestore={restoreReminder} />}</Stack.Screen>

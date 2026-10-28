@@ -80,14 +80,16 @@ export function createListenSession(api: SessionApi, now: () => Date = () => new
     set({ feed, heard: state.heard + 1, pendingChunks: result.pendingChunks });
   };
 
-  const startSession = async () => {
-    const info = await api.start();
-    set({ sessionId: info.id });
-    return info.id;
+  // One start at a time: words sent while the session is still starting wait for it,
+  // instead of opening a second session that Stop would never close.
+  let starting: Promise<string> | undefined;
+  const startSession = () => {
+    starting ??= api.start().then(info => { set({ sessionId: info.id }); return info.id; }).finally(() => { starting = undefined; });
+    return starting;
   };
 
   const send = async (text: string, capturedAt: Date) => {
-    let sessionId = state.sessionId ?? await startSession();
+    let sessionId = state.sessionId ?? await (starting ?? startSession());
     if (isEmailCommand(text)) {
       const email = await api.email(sessionId, text);
       set({ feed: [{ key: `email-${email.id}`, kind: "email", email }, ...state.feed], heard: state.heard + 1 });
@@ -150,6 +152,7 @@ export function createListenSession(api: SessionApi, now: () => Date = () => new
     async stop(): Promise<SessionDetail | undefined> {
       if (state.status !== "listening" && state.status !== "starting") return state.detail;
       set({ status: "ending" });
+      await starting?.catch(() => {});
       await queue;
       // One more try for anything that never reached the server.
       const retry = state.unsent; set({ unsent: [] });

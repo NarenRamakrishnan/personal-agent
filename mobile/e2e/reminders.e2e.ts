@@ -280,3 +280,31 @@ test("finishing a repeating reminder sets up the next one, and undo takes it bac
   await page.getByRole("button", { name: "What Heedly remembers", exact: true }).click();
   await expect(page.getByText("Repeating", { exact: true }).filter({ visible: true })).toBeVisible();
 });
+test("typing the moment the screen opens still lands on the review list", async ({ page }) => {
+  const starts: string[] = [];
+  page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/sessions")) starts.push(r.url()); });
+  await page.route(`${api}/sessions`, async route => { await new Promise(r => setTimeout(r, 800)); await route.continue(); });
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow at 7am to stretch");
+  await page.getByLabel("Your words", { exact: true }).press("Enter");
+  await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
+  await expect(page.getByText("Review your session", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+  expect(starts).toHaveLength(1);
+});
+test("the device turning dark mid-session doesn't restart the session", async ({ page }) => {
+  const starts: string[] = [];
+  page.on("request", r => { if (r.method() === "POST" && r.url().endsWith("/sessions")) starts.push(r.url()); });
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow at 8am to call the bank");
+  await page.getByLabel("Your words", { exact: true }).press("Enter");
+  await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForTimeout(500);
+  await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+  expect(starts).toHaveLength(1);
+  // Leaving the listening screen picks up the new look.
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(17, 27, 21)");
+});
