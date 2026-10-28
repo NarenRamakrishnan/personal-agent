@@ -101,8 +101,15 @@ def draft_from_model(data: dict, source_text: str) -> EmailDraft:
     subject, body = _clean(email.get("subject"), 300), _clean_body(email.get("body"))
     if not subject or not body:
         raise NoEmailRequest()
+    to = _spoken_address(email.get("to"), source_text)
+    if to is None:
+        # The prompt tells the model never to build an address, so "priya at example
+        # dot com" can come back empty. One address in the person's own words is theirs.
+        typed = {m.group(0).lower() for m in SPOKEN_ADDRESS_RE.finditer(source_text)}
+        said = {m.group(0).lower() for m in SPOKEN_ADDRESS_RE.finditer(_written(source_text))} - typed
+        to = said.pop() if len(said) == 1 else None
     return EmailDraft(
-        to=_spoken_address(email.get("to"), source_text),
+        to=to,
         to_name=_clean(email.get("toName"), 200),
         subject=subject,
         body=body,

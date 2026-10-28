@@ -370,3 +370,10 @@ def test_an_address_spoken_with_at_and_dot_counts_as_said(text, address):
 def test_at_and_dot_said_in_passing_do_not_make_an_address():
     assert emailer._spoken_address("me@home.com", "remind me at home to dot the i's") is None
     assert emailer._spoken_address("priya@gmail.co", "email priya at gmail dot com") is None
+
+
+def test_an_address_said_aloud_fills_the_draft_even_when_the_model_leaves_it_out():
+    reply = {"email": {"to": None, "toName": "Priya", "subject": "Meeting", "body": "The meeting moved to 3."}}
+    assert emailer.draft_from_model(reply, "email priya at gmail dot com that the meeting moved to 3").to == "priya@gmail.com"
+    # Two addresses said and none chosen: don't pick one for them.
+    assert emailer.draft_from_model(reply, "email a at x dot com or b at y dot org").to is None
