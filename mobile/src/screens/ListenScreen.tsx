@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AccessibilityInfo, Linking, Text, View } from "react-native";
+import { AccessibilityInfo, Linking, Platform, Text, View } from "react-native";
 import { sessionApi } from "../api/sessions";
 import { Badge, Button, Card, FadeIn, Field, Notice, Page, PulseDot, SectionHeader, ThinkingDots } from "../components/Controls";
 import { useContinuousSpeech } from "../components/useContinuousSpeech";
@@ -110,7 +110,8 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const pending = state.pendingChunks;
 
   const typedPanel = <Card>
-    <Field label="Your words" value={typed} onChangeText={setTyped} multiline placeholder="Call the dentist tomorrow at 9, and buy milk near a grocery store" error={typedError} />
+    <Field label="Your words" value={typed} onChangeText={setTyped} multiline autoFocus={typingOnly} placeholder="Call the dentist tomorrow at 9, and buy milk near a grocery store" error={typedError}
+      onEnter={() => { if (!adding) void addTyped(); }} helper={Platform.OS === "web" ? "Press Enter to add. Shift+Enter starts a new line." : undefined} />
     <Button title={adding ? "Adding…" : "Add to session"} variant="secondary" busy={adding} onPress={() => { void addTyped(); }} />
     {typedNote ? <Text accessibilityRole="alert" style={type.meta}>{typedNote}</Text> : null}
   </Card>;

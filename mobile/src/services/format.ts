@@ -81,3 +81,14 @@ export function missingInfo(reminder: Reminder, savedPlaces?: string[]): Missing
   }
   return undefined;
 }
+
+// Reminders whose time has just come (in the last 12 hours), for the "Due now" banner.
+// Older ones stay in the list marked overdue; snoozed ones wait until the snooze ends.
+export function dueNow(reminders: Reminder[], now = new Date()): Reminder[] {
+  const recent = now.getTime() - 12 * 3600000;
+  return reminders.filter(reminder => {
+    if (reminder.completed || !reminder.deadline || reminder.triggerType === "location") return false;
+    const at = Math.max(Date.parse(reminder.deadline), reminder.snoozedUntil ? Date.parse(reminder.snoozedUntil) : 0);
+    return Number.isFinite(at) && at <= now.getTime() && at >= recent;
+  }).sort((a, b) => Date.parse(b.deadline!) - Date.parse(a.deadline!));
+}

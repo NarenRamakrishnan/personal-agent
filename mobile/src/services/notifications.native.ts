@@ -8,6 +8,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fingerprint, loadHeld, saveHeld, reserveCooldown, releaseCooldown } from "./heldNotifications";
 const heldId = (id: string) => `context-quiet-${id}`;
 
+export type NotificationStatus = "granted" | "default" | "denied" | "unsupported";
+export async function notificationStatus(): Promise<NotificationStatus> {
+  const permission = await Notifications.getPermissionsAsync();
+  return permission.granted ? "granted" : permission.canAskAgain ? "default" : "denied";
+}
 export async function notificationTimingStatus() {
   return await exactAlarmsAllowed() ? "Exact-time scheduling is allowed. Delivery still depends on your device settings." : "Exact-time scheduling is disabled. Android may delay reminders. Allow Alarms & reminders in system settings.";
 }

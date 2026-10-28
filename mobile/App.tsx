@@ -51,6 +51,9 @@ export default function App() {
   const setCompleted = (id: string, completed: boolean) => update(id, { completed });
   const deleteReminder = async (id: string) => { await store.remove(id); await cancelReminderNotification(id); };
   const snoozeReminder = (id: string, snoozedUntil: string) => update(id, { snoozedUntil });
+  // Undo a delete by saving the reminder again under a fresh id.
+  const restoreReminder = (r: Reminder) => addReminder({ id: `mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`, title: r.title, description: r.description,
+    createdAt: r.createdAt, deadline: r.deadline, triggerType: r.triggerType, location: r.location, completed: r.completed });
 
   // Light, dark or follow the device. Changing it swaps the palette and remounts the screens,
   // keeping the navigation history so the person stays where they were.
@@ -71,7 +74,7 @@ export default function App() {
       <NavigationContainer key={scheme} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state; }} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
         <StatusBar style={scheme === "dark" ? "light" : "dark"} />
         <Stack.Navigator screenOptions={({ navigation }) => ({ ...(Platform.OS === "web" ? { headerLeft: ({ canGoBack }: { canGoBack?: boolean }) => canGoBack ? <WebBack onPress={() => navigation.goBack()} /> : null } : null), headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } })}>
-          <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} />}</Stack.Screen>
+          <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} onSnooze={snoozeReminder} onRestore={restoreReminder} />}</Stack.Screen>
           <Stack.Screen name="Listen" options={{ title: "" }}>{(props) => <ListenScreen {...props} onSessionEnded={refresh} />}</Stack.Screen>
           <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} onRefresh={refresh} />}</Stack.Screen>
           <Stack.Screen name="Settings" options={{ title: "" }}>{(props) => <SettingsScreen {...props} reminders={reminders} />}</Stack.Screen>

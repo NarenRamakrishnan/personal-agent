@@ -25,7 +25,6 @@ function Row({ label, value, detail }: { label: string; value: string; detail?: 
 
 export function ReminderDetailScreen({ navigation, route, reminders, onComplete, onDelete, onSnooze }: Props) {
   const reminder = reminders.find(r => r.id === route.params.reminder.id) ?? route.params.reminder;
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const run = async (key: string, action: () => Promise<void>, after?: () => void) => {
@@ -63,14 +62,8 @@ export function ReminderDetailScreen({ navigation, route, reminders, onComplete,
       </Chips>
       {busy.startsWith("snooze") ? <Text style={type.meta}>Snoozing…</Text> : null}
     </View> : null}
-    {!confirmDelete ? <Button title="Delete reminder" variant="dangerGhost" onPress={() => setConfirmDelete(true)} />
-      : <Notice tone="danger" title="Delete reminder?">
-        <Text style={[type.body, { color: colors.danger }]}>This reminder will be permanently deleted.</Text>
-        <View style={styles.actions}>
-          <Button title="Keep reminder" variant="secondary" compact onPress={() => setConfirmDelete(false)} />
-          <Button title="Delete reminder" variant="danger" compact busy={busy === "delete"} accessibilityLabel="Confirm delete" onPress={() => { void run("delete", () => onDelete(reminder.id), () => navigation.popToTop()); }} />
-        </View>
-      </Notice>}
+    <Button title={busy === "delete" ? "Deleting…" : "Delete reminder"} variant="dangerGhost" busy={busy === "delete"} onPress={() => { void run("delete", () => onDelete(reminder.id), () => navigation.popTo("Home", { deleted: reminder })); }} />
+    <Text style={[type.meta, { textAlign: "center" }]}>You can undo a delete from the home screen.</Text>
   </Page>;
 }
 

@@ -6,6 +6,13 @@ import { evaluateContext, LOCATION_ENABLED } from "./context";
 import { nearbyPlaces } from "./places";
 let handler: (() => void) | undefined;
 export const locationPreferenceChanged = () => handler?.();
+export const locationEnabled = async () => await AsyncStorage.getItem(LOCATION_ENABLED) === "true";
+// One tap from anywhere a place reminder needs it: ask for permission, then start checking.
+export async function turnOnLocation() {
+  const permission = await Location.requestForegroundPermissionsAsync();
+  if (!permission.granted) throw new Error("Location permission denied. You can still use time reminders.");
+  await AsyncStorage.setItem(LOCATION_ENABLED, "true"); locationPreferenceChanged();
+}
 export async function evaluateFix(fix: Location.LocationObject) {
   if (await AsyncStorage.getItem(LOCATION_ENABLED) !== "true") return;
   // Batched background callbacks can contain old positions; never treat them as current.

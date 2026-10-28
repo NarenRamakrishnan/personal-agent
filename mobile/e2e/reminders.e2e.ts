@@ -3,7 +3,7 @@ const api = process.env.PERSON2_TEST_API!;
 async function home(page: Page) {
   await page.goto("/"); await expect(page.getByText("A little less to remember.", { exact: true })).toBeVisible();
   // Refuse a stale/demo build rather than letting fake local data pass these tests.
-  await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).some(key => key.startsWith("device.")))).toBe(true);
+  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith("device.")))).toBe(true);
 }
 // Typed session: the same path as speech, through /sessions/parse and the review list.
 async function typeSession(page: Page, phrases: string[]) {
@@ -45,9 +45,12 @@ test("typed session saves, reviews, edits, reloads, snoozes, completes and delet
   await page.getByRole("button", { name: "Show completed reminders", exact: true }).click();
   await page.getByRole("button", { name: `Open reminder: ${title}`, exact: true }).click();
   await page.getByRole("button", { name: "Delete reminder", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm delete", exact: true }).click();
   await expect(page.getByText("A little less to remember.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: `Open reminder: ${title}`, exact: true })).toHaveCount(0);
+  // One tap to delete, one tap to bring it back.
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  // It comes back as it was: still completed.
+  await expect(page.getByText("Done (1)", { exact: true })).toBeVisible();
 });
 test("deleting from the review list waits for Done and can be undone", async ({ page }) => {
   await typeSession(page, ["Remind me tomorrow to water the plants", "Remind me tomorrow to pay rent"]);
@@ -110,10 +113,19 @@ test("a reminder with no time or place is flagged with a way to fix it", async (
   await page.getByRole("button", { name: /^Add a time or place for / }).click();
   await expect(page.getByText("Edit reminder", { exact: true })).toBeVisible();
 });
-test("native-only notifications fail clearly in a browser", async ({ page }) => {
+// Headless Chromium always reports notifications as blocked; stand in for a browser that asks and gets a yes.
+async function allowNotificationsOnAsk(page: Page) {
+  await page.evaluate(() => {
+    let granted = false;
+    Object.defineProperty(Notification, "permission", { configurable: true, get: () => granted ? "granted" : "default" });
+    Notification.requestPermission = async () => { granted = true; return "granted"; };
+  });
+}
+test("browser notifications can be turned on from Settings", async ({ page }) => {
+  await allowNotificationsOnAsk(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Enable reminder notifications", exact: true }).click();
-  await expect(page.getByText("Native notifications require", { exact: false })).toBeVisible();
+  await expect(page.getByText("Browser notifications are on.", { exact: false })).toBeVisible();
 });
 test("dark mode follows the device, can be pinned from Settings and is remembered", async ({ page }) => {
   const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -144,4 +156,71 @@ test("typing something Heedly already has explains why nothing new appeared", as
     await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
   }
   await expect(page.getByText(/^Nothing new in "Remind me tomorrow at 7am to feed the fish"/)).toBeVisible();
+});
+
+// A reminder saved straight to the API, for states the UI won't create (like one already due).
+async function saveDirect(page: Page, reminder: Record<string, unknown>) {
+  await page.evaluate(async ({ api, reminder }) => {
+    const token = Object.entries(localStorage).find(([key]) => key.startsWith("device."))![1];
+    const response = await fetch(`${api}/reminders`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(reminder) });
+    if (!response.ok) throw new Error(`save failed ${response.status}`);
+  }, { api, reminder });
+}
+test("reminders are still there after closing the tab", async ({ page, context }) => {
+  await create(page, "Remind me tomorrow to renew the parking permit", "Renew parking permit");
+  await page.close();
+  const next = await context.newPage(); await home(next);
+  await expect(next.getByRole("button", { name: "Open reminder: Renew parking permit", exact: true })).toBeVisible();
+});
+test("a reminder that comes due shows at the top with Done, Snooze and Undo", async ({ page }) => {
+  const now = Date.now();
+  await saveDirect(page, { id: `e2e-due-${now}`, title: "Take the laundry out", createdAt: new Date(now).toISOString(), deadline: new Date(now - 60000).toISOString(), triggerType: "time", completed: false });
+  await saveDirect(page, { id: `e2e-due2-${now}`, title: "Move the car", createdAt: new Date(now).toISOString(), deadline: new Date(now - 120000).toISOString(), triggerType: "time", completed: false });
+  await page.reload();
+  await expect(page.getByText("2 reminders due now", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Snooze Move the car for 10 minutes", exact: true }).click();
+  await expect(page.getByText("Due now", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Mark Take the laundry out as done", exact: true }).click();
+  await expect(page.getByText('"Take the laundry out" marked done.', { exact: true })).toBeVisible();
+  await expect(page.getByText("Due now", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByText("Due now", { exact: true })).toBeVisible();
+});
+test("ticking a reminder done on the list can be undone", async ({ page }) => {
+  await create(page, "Remind me tomorrow to call the bank", "Call the bank");
+  await page.getByRole("checkbox", { name: "Mark Call the bank as done", exact: true }).click();
+  await expect(page.getByText('"Call the bank" marked done.', { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: "Mark Call the bank as done", exact: true })).toBeVisible();
+});
+test("review offers one-tap location for a place reminder", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]); await context.setGeolocation({ latitude: 42.39, longitude: -72.53 });
+  // The isolated mock parser never sets a place, so hand Review a place reminder like the real model returns.
+  await page.route(`${api}/sessions/*/end`, async route => {
+    const detail = await (await route.fetch()).json();
+    detail.reminders = [{ id: "pharmacy-run", title: "Pick up prescription", createdAt: new Date().toISOString(), triggerType: "location", location: { type: "category", category: "pharmacy" }, completed: false }];
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(detail) });
+  });
+  await typeSession(page, ["Pick up my prescription when I'm near a pharmacy"]);
+  await expect(page.getByText("Place reminders need your location. Heedly checks every couple of minutes, not constantly.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Turn on location", exact: true }).click();
+  await expect(page.getByText("Place reminders need your location. Heedly checks every couple of minutes, not constantly.", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Location reminders", exact: true }).click();
+  await expect(page.getByText("On", { exact: true })).toBeVisible();
+});
+test("review offers notifications when a reminder has a time", async ({ page }) => {
+  await allowNotificationsOnAsk(page);
+  await typeSession(page, ["Remind me tomorrow at 9am to call the dentist"]);
+  await expect(page.getByText("So Heedly can actually remind you", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Turn on notifications", exact: true }).click();
+  await expect(page.getByText("So Heedly can actually remind you", { exact: true })).toHaveCount(0);
+});
+test("pressing Enter adds typed words", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow at 6pm to go for a run");
+  await page.getByLabel("Your words", { exact: true }).press("Enter");
+  await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
+  await expect(page.getByText(/go for a run/).first()).toBeVisible();
 });

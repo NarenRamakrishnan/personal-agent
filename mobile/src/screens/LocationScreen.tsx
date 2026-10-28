@@ -8,7 +8,7 @@ import { EvalContext, Evaluation, SavedPlace } from "../types/context";
 import { nearbyPlaces } from "../services/places";
 import { evaluateContext, LOCATION_ENABLED } from "../services/context";
 import { disableBackgroundContext, enableBackgroundContext, syncBackgroundRegions } from "../services/background";
-import { locationPreferenceChanged } from "../services/locationLifecycle";
+import { locationPreferenceChanged, turnOnLocation } from "../services/locationLifecycle";
 import { cancelContextNotifications } from "../services/notifications";
 import { spacing, type } from "../theme";
 
@@ -43,11 +43,7 @@ export function LocationScreen() {
         ? <AsyncButton title="Turn off location" variant="secondary" compact action={async () => {
             await AsyncStorage.setItem(LOCATION_ENABLED, "false"); setEnabled(false); setContext(undefined); locationPreferenceChanged(); await cancelContextNotifications(); await disableBackgroundContext();
           }} />
-        : <AsyncButton title="Turn on location" compact action={async () => {
-            const permission = await Location.requestForegroundPermissionsAsync();
-            if (!permission.granted) throw new Error("Location permission denied. You can still use time reminders.");
-            await AsyncStorage.setItem(LOCATION_ENABLED, "true"); setEnabled(true); locationPreferenceChanged();
-          }} />}
+        : <AsyncButton title="Turn on location" compact action={async () => { await turnOnLocation(); setEnabled(true); }} />}
     </Card>
 
     <Card>

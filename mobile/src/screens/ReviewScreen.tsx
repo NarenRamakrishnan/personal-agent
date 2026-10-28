@@ -8,6 +8,8 @@ import { AsyncButton, Badge, Button, Card, FadeIn, Notice, Page, ScreenTitle, Se
 import { RootStackParamList } from "../navigation/types";
 import { contextApi } from "../api/client";
 import { missingInfo, triggerText } from "../services/format";
+import { locationEnabled, turnOnLocation } from "../services/locationLifecycle";
+import { enableNotifications, notificationStatus, NotificationStatus, reconcileNotifications } from "../services/notifications";
 import { colors, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
@@ -50,6 +52,18 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
     contextApi.savedPlaces().then(rows => { if (live) setSavedNames(rows.map(p => p.name.toLowerCase())); }, () => {});
     return () => { live = false; };
   }, []));
+  // Ask for notifications and location right here, when a reminder actually needs them.
+  const [alerts, setAlerts] = useState<NotificationStatus>();
+  const [locationOn, setLocationOn] = useState<boolean>();
+  useFocusEffect(useCallback(() => {
+    let live = true;
+    notificationStatus().then(value => { if (live) setAlerts(value); }, () => {});
+    locationEnabled().then(value => { if (live) setLocationOn(value); }, () => {});
+    return () => { live = false; };
+  }, []));
+  const active = [...newItems, ...updated].filter(r => !pending[r.id]);
+  const askAlerts = alerts === "default" && active.some(r => r.deadline);
+  const askLocation = locationOn === false && active.some(r => r.location);
   const needsDetail = [...newItems, ...updated].filter(r => !pending[r.id] && missingInfo(r, savedNames)).length;
   const drafts = detail.actions.filter(a => a.status === "needs_approval" && (!stillPending || stillPending.has(a.id) || a.id.startsWith("mock-")));
   const total = newItems.length + updated.length + completed.length + drafts.length;
@@ -168,6 +182,16 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
         </Card>);
       })}
     </View> : null}
+    {askAlerts || askLocation ? <Notice tone="success" title="So Heedly can actually remind you">
+      <Text style={[type.meta, { color: colors.success }]}>{askAlerts && askLocation ? "Turn on notifications for the timed reminders and location for the place ones." : askAlerts ? "Notifications are off, so Heedly can't tell you when these are due." : "Place reminders need your location. Heedly checks every couple of minutes, not constantly."}</Text>
+      <View style={styles.actions}>
+        {askAlerts ? <AsyncButton title="Turn on notifications" compact action={async () => {
+          await enableNotifications().finally(() => notificationStatus().then(setAlerts, () => {}));
+          await reconcileNotifications(reminders);
+        }} /> : null}
+        {askLocation ? <AsyncButton title="Turn on location" compact variant={askAlerts ? "secondary" : "primary"} action={async () => { await turnOnLocation(); setLocationOn(true); }} /> : null}
+      </View>
+    </Notice> : null}
   </Page>;
 }
 

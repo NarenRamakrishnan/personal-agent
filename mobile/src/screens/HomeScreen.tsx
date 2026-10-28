@@ -5,21 +5,22 @@ import { ActivityIndicator, Image, Pressable, SectionList, Text, View } from "re
 import { SafeAreaView } from "react-native-safe-area-context";
 import { actionsApi } from "../api/actions";
 import { USE_MOCKS } from "../api/client";
-import { Button, FadeIn, Notice, SectionHeader } from "../components/Controls";
+import { AsyncButton, Button, FadeIn, Notice, SectionHeader } from "../components/Controls";
 import { ListenButton } from "../components/ListenButton";
 import { ReminderCard } from "../components/ReminderCard";
 import { RootStackParamList } from "../navigation/types";
-import { groupReminders } from "../services/format";
+import { dueNow, groupReminders } from "../services/format";
 import { colors, column, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home"> & {
   reminders: Reminder[]; loaded: boolean; onRefresh: () => Promise<void>; refreshing: boolean; error: string; onToggle: (reminder: Reminder) => Promise<void>;
+  onSnooze: (id: string, until: string) => Promise<void>; onRestore: (reminder: Reminder) => Promise<void>;
 };
 
 const logo = require("../../assets/logo-mark.png");
 
-export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, refreshing, error, onToggle }: Props) {
+export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, refreshing, error, onToggle, onSnooze, onRestore }: Props) {
   const [showDone, setShowDone] = useState(false);
   const [drafts, setDrafts] = useState(0);
   const [toggleError, setToggleError] = useState("");
@@ -34,6 +35,23 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
     actionsApi.pending().then(rows => { if (live) setDrafts(rows.length); }, () => {});
     return () => { live = false; };
   }, []));
+  // Undo for the last done or delete, so a mistap costs nothing.
+  const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> }>();
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(undefined), 8000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+  const deleted = route.params?.deleted;
+  useEffect(() => {
+    if (!deleted) return;
+    setUndo({ label: `Deleted "${deleted.title}".`, run: () => onRestore(deleted) });
+    navigation.setParams({ deleted: undefined });
+  }, [deleted]);
+  // Re-check every 30 seconds so a reminder shows as due while the app is open.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(timer); }, []);
+  const due = useMemo(() => dueNow(reminders, now), [reminders, now]);
   const groups = useMemo(() => groupReminders(reminders), [reminders]);
   const active = groups.today.length + groups.upcoming.length + groups.place.length;
   const sections = [
@@ -42,7 +60,12 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
     { key: "place", title: "At a place", data: groups.place },
     ...(groups.done.length ? [{ key: "done", title: `Done (${groups.done.length})`, data: showDone ? groups.done : [] }] : []),
   ].filter(section => section.key === "done" || section.data.length);
-  const toggle = (reminder: Reminder) => { setToggleError(""); onToggle(reminder).catch(e => setToggleError(e instanceof Error ? e.message : "Couldn't update that reminder.")); };
+  const toggle = (reminder: Reminder) => {
+    setToggleError("");
+    onToggle(reminder).then(() => {
+      setUndo(reminder.completed ? undefined : { label: `"${reminder.title}" marked done.`, run: () => onToggle({ ...reminder, completed: true }) });
+    }, e => setToggleError(e instanceof Error ? e.message : "Couldn't update that reminder."));
+  };
 
   const header = <View style={[column, { paddingHorizontal: spacing.lg }]}>
     <View style={styles.brand}>
@@ -55,6 +78,19 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
       </Pressable>
     </View>
     {notice ? <View style={{ marginBottom: spacing.md }}><Notice tone="success">{notice}</Notice></View> : null}
+    {undo ? <FadeIn style={{ marginBottom: spacing.md }}><View style={styles.undo} accessibilityLiveRegion="polite">
+      <Text style={[type.body, { flex: 1 }]}>{undo.label}</Text>
+      <Button title="Undo" variant="ghost" compact onPress={() => { const { run } = undo; setUndo(undefined); run().catch(e => setToggleError(e instanceof Error ? e.message : "Couldn't undo that.")); }} />
+    </View></FadeIn> : null}
+    {due.length ? <FadeIn style={{ marginBottom: spacing.md }}><Notice tone="attention" title={due.length === 1 ? "Due now" : `${due.length} reminders due now`}>
+      {due.slice(0, 3).map(r => <View key={r.id} style={styles.dueRow}>
+        <Text style={[type.cardTitle, { color: colors.accent }]}>{r.title}</Text>
+        <View style={styles.dueActions}>
+          <AsyncButton title="Done" compact accessibilityLabel={`Mark ${r.title} as done`} action={async () => { await onToggle(r); setUndo({ label: `"${r.title}" marked done.`, run: () => onToggle({ ...r, completed: true }) }); }} />
+          <AsyncButton title="Snooze 10 min" variant="secondary" compact accessibilityLabel={`Snooze ${r.title} for 10 minutes`} action={() => onSnooze(r.id, new Date(Date.now() + 600000).toISOString())} />
+        </View>
+      </View>)}
+    </Notice></FadeIn> : null}
     <View style={styles.intro}>
       <Text style={[type.heroTitle, { textAlign: "center" }]}>A little less to remember.</Text>
       <Text style={[type.body, styles.introBody]}>Talk naturally. When you stop, Heedly turns what you said into reminders.</Text>
@@ -126,6 +162,9 @@ const styles = themedStyles(() => ({
   loading: { flexDirection: "row", gap: spacing.xs, alignItems: "center", justifyContent: "center", paddingVertical: spacing.xl },
   empty: { alignItems: "center", gap: spacing.xs, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
   emptyLogo: { width: 56, height: 56, borderRadius: 16, marginBottom: spacing.xs },
+  undo: { flexDirection: "row", alignItems: "center", gap: spacing.xs, backgroundColor: colors.surfaceSubtle, borderRadius: radii.card, paddingLeft: spacing.md, paddingRight: spacing.xxs, minHeight: 56 },
+  dueRow: { gap: spacing.xs, paddingTop: spacing.xxs },
+  dueActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   sectionPad: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   doneRow: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 }));

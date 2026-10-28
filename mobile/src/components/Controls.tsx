@@ -58,15 +58,19 @@ export function AsyncButton({ title, busyTitle, action, variant = "primary", acc
   </View>;
 }
 
-export function Field({ label, value, onChangeText, multiline = false, placeholder, helper, error, keyboardType, autoFocus }: {
+export function Field({ label, value, onChangeText, multiline = false, placeholder, helper, error, keyboardType, autoFocus, onEnter }: {
   label: string; value: string; onChangeText: (text: string) => void; multiline?: boolean; placeholder?: string; helper?: string; error?: string;
   keyboardType?: "default" | "email-address" | "numeric"; autoFocus?: boolean;
+  // On the web, Enter runs this (Shift+Enter still starts a new line).
+  onEnter?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return <View style={{ gap: spacing.xs }}>
     <Text style={type.fieldLabel}>{label}</Text>
     <TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} multiline={multiline} placeholder={placeholder} placeholderTextColor={colors.textSecondary}
-      keyboardType={keyboardType} autoFocus={autoFocus} autoCapitalize={keyboardType === "email-address" ? "none" : "sentences"} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      keyboardType={keyboardType} autoFocus={autoFocus}
+      onKeyPress={onEnter && Platform.OS === "web" ? event => { const key = event.nativeEvent as { key: string; shiftKey?: boolean }; if (key.key === "Enter" && !key.shiftKey) { event.preventDefault(); onEnter(); } } : undefined}
+      autoCapitalize={keyboardType === "email-address" ? "none" : "sentences"} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       style={[styles.input, multiline && { minHeight: 104, textAlignVertical: "top" }, (focused || error) && { borderWidth: 2, padding: 13, borderColor: error ? colors.danger : colors.brandGreen }]} />
     {error ? <Text accessibilityRole="alert" style={[type.meta, { color: colors.danger }]}>{error}</Text> : helper ? <Text style={type.meta}>{helper}</Text> : null}
   </View>;
