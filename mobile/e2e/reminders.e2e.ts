@@ -372,3 +372,9 @@ test("the device turning dark mid-session doesn't restart the session", async ({
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(17, 27, 21)");
 });
+test("a reminder shows the words it came from, so a mistake can be traced", async ({ page }) => {
+  await create(page, "Remind me tomorrow to go to the bank", "Go to the bank");
+  await page.getByRole("button", { name: "Open reminder: Go to the bank", exact: true }).click();
+  await expect(page.getByText("From what you said", { exact: true })).toBeVisible();
+  await expect(page.getByText('"Remind me tomorrow to go to the bank"', { exact: true })).toBeVisible();
+});

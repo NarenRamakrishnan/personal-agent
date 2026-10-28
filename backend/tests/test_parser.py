@@ -81,6 +81,7 @@ def test_prompt_carries_local_time_and_weekday():
     assert "2026-10-01 14:00" in system and "Thursday" in system and "America/New_York" in system
     # the precomputed calendar the model reads weekdays from
     assert "Thu 2026-10-01 (today)" in system and "Fri 2026-10-02 (tomorrow)" in system
+    assert "Sat 2026-10-03 (day after tomorrow)" in system
     assert "Mon 2026-10-05" in system and "Thu 2026-10-15" in system
 
 

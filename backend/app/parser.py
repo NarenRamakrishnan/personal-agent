@@ -96,7 +96,7 @@ def resolve_tz(name: str | None) -> ZoneInfo:
 def calendar_lines(local: datetime, days: int = 15) -> str:
     """Two weeks of dates with each day's UTC offset, so a deadline past a clock
     change gets the right offset in the first place."""
-    names = {0: " (today)", 1: " (tomorrow)"}
+    names = {0: " (today)", 1: " (tomorrow)", 2: " (day after tomorrow)"}
     lines = []
     for i in range(days):
         day = (local + timedelta(days=i)).date()

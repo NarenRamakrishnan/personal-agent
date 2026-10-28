@@ -39,7 +39,7 @@ def test_a_zone_without_daylight_saving_is_left_alone():
 
 def test_the_calendar_tells_the_model_each_days_offset():
     system = parser.build_messages("hi", datetime(2026, 10, 29, 14, 0, tzinfo=NY), NY)[0]["content"]
-    assert "Sat 2026-10-31, offset -04:00" in system
+    assert "Sat 2026-10-31 (day after tomorrow), offset -04:00" in system
     assert "Sun 2026-11-01, offset -05:00" in system
     assert "Thu 2026-10-29 (today), offset -04:00" in system
 

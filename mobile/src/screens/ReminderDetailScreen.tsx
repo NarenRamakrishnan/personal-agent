@@ -52,6 +52,7 @@ export function ReminderDetailScreen({ navigation, route, reminders, onComplete,
       {place ? <Row label="Place" value={place.charAt(0).toUpperCase() + place.slice(1)} detail={reminder.location?.radiusMeters ? `Within ${reminder.location.radiusMeters} meters` : undefined} /> : null}
       {snoozed ? <Row label="Snoozed until" value={whenText(reminder.snoozedUntil!)} /> : null}
       {reminder.repeat ? <Row label="Repeats" value={repeatText(reminder)} detail="When you finish it, Heedly sets up the next one." /> : null}
+      {reminder.sourceText ? <Row label="From what you said" value={`"${reminder.sourceText.length > 280 ? `${reminder.sourceText.slice(0, 277)}…` : reminder.sourceText}"`} detail="If Heedly got something wrong, fix it with Edit reminder." /> : null}
     </Card>
     <Button title="Edit reminder" variant="secondary" onPress={() => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: reminder.title, deadline: reminder.deadline, triggerType: reminder.triggerType, location: reminder.location, repeat: reminder.repeat }, existing: reminder })} />
     {!reminder.completed ? <View style={{ gap: spacing.xs }}>

@@ -20,6 +20,8 @@ export type Reminder = {
   completed: boolean;
   lastNotifiedAt?: string;
   snoozedUntil?: string;
+  // The words this reminder came from, when transcripts are kept. Read only.
+  sourceText?: string | null;
   // Comes back after it's done: the backend makes the next one when this one is completed.
   repeat?: ReminderRepeat;
 };
