@@ -192,6 +192,7 @@ flowchart TD
 | Context | POST `/evaluate-reminder` with inline reminder and camelCase context |
 | Email | POST `/actions/email`; PATCH action, POST approve/cancel |
 | Privacy | GET `/privacy`, GET/PATCH `/settings`, confirmed DELETE `/history` |
+| Memory | GET/POST `/memories`, PATCH/DELETE `/memories/{id}`; session detail `learned` |
 
 ## 7. Reproduce verification
 

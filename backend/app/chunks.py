@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import case, delete, or_, update
 from sqlmodel import Session, func, select
 
-from app import config, parser, sessions, settings
+from app import config, memory, parser, sessions, settings
 from app.models import SHARED_OWNER, PendingChunkRow, Reminder, ReminderRow, readable, row_from_create, utcnow
 
 log = logging.getLogger(__name__)
@@ -68,9 +68,10 @@ def parse_candidates(db: Session, session_id: str, text: str, now: datetime, tz_
     if is_filler(text):
         return []
     found = parser.parse(text, now, session_id, tz_name, fallback=False, times=settings.load(db, owner).times,
-                         open_reminders=open_reminders(db, session_id, owner))
-    changes = [c for c in found if isinstance(c, parser.Change)]
-    candidates = [c for c in found if not isinstance(c, parser.Change)]
+                         open_reminders=open_reminders(db, session_id, owner),
+                         known=memory.prompt_lines(memory.known(db, owner)))
+    changes = [c for c in found if isinstance(c, (parser.Change, memory.Learned))]
+    candidates = [c for c in found if not isinstance(c, (parser.Change, memory.Learned))]
     for c in candidates:
         c.session_id = session_id  # never trust the parser to have set it
     return sessions.drop_duplicates(db, session_id, candidates, owner) + changes
@@ -82,6 +83,7 @@ def _apply(db: Session, change: "parser.Change", session_id: str, owner: str = S
         return None  # deleted or finished since the model saw it
     if change.action == "complete":
         row.completed = True
+        memory.make_next(db, row)
     else:
         for key, value in change.fields.items():
             if key == "location":
@@ -97,9 +99,10 @@ def _save(db: Session, candidates: list, remove_chunk_id: str | None = None,
     """New reminders and changes land in one commit with the chunk's removal.
     Returns (created, changed)."""
     keep = settings.load(db, owner).keep_transcripts
-    new = [c for c in candidates if not isinstance(c, parser.Change)]
+    new = [c for c in candidates if not isinstance(c, (parser.Change, memory.Learned))]
     rows = [row_from_create(c, keep_text=keep, owner=owner) for c in new]
     db.add_all(rows)
+    memory.remember(db, owner, [c for c in candidates if isinstance(c, memory.Learned)], session_id)
     changed = [r for c in candidates if isinstance(c, parser.Change) if (r := _apply(db, c, session_id, owner)) is not None]
     if remove_chunk_id:
         db.execute(delete(PendingChunkRow).where(PendingChunkRow.id == remove_chunk_id))

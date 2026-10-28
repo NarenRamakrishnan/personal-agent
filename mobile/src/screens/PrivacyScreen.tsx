@@ -62,9 +62,9 @@ export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> })
 
     {message ? <Notice tone="success">{message}</Notice> : null}
 
-    {!confirm ? <Button title="Delete reminders, drafts & history" variant="dangerGhost" onPress={() => setConfirm(true)} />
-      : <Notice tone="danger" title="Delete reminders, drafts & history?">
-        <Text style={[type.body, { color: colors.danger }]}>This permanently deletes those records from Heedly's backend (or demo storage). Location will turn off. Saved places will remain.</Text>
+    {!confirm ? <Button title="Delete reminders, drafts, memory & history" variant="dangerGhost" onPress={() => setConfirm(true)} />
+      : <Notice tone="danger" title="Delete reminders, drafts, memory & history?">
+        <Text style={[type.body, { color: colors.danger }]}>This permanently deletes those records, and everything Heedly remembers about you, from Heedly's backend (or demo storage). Location will turn off. Saved places will remain.</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
           <Button title="Keep my data" variant="secondary" compact onPress={() => setConfirm(false)} />
           <AsyncButton title="Delete data" variant="danger" compact accessibilityLabel="Confirm permanent history deletion" action={async () => {

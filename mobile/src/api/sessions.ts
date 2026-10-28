@@ -1,11 +1,12 @@
 import { mockParse, reminderApi, request, timezone, USE_MOCKS } from "./client";
 import { actionsApi } from "./actions";
 import { EmailAction } from "../types/context";
+import { Memory } from "../types/memory";
 import { Reminder } from "../types/reminder";
 
 // Wire shapes for the backend's always-listening endpoints (backend/app/models.py).
 export type SessionInfo = { id: string; status: "listening" | "ended"; startedAt: string; lastActivityAt: string; endedAt?: string; endReason?: "user" | "silence_timeout" | "max_duration" };
-export type SessionDetail = SessionInfo & { reminders: Reminder[]; actions: EmailAction[]; pendingChunks: number; changed: Reminder[] };
+export type SessionDetail = SessionInfo & { reminders: Reminder[]; actions: EmailAction[]; pendingChunks: number; changed: Reminder[]; learned?: Memory[] };
 export type ChunkResult = { sessionId: string; reminders: Reminder[]; pendingChunks: number; changed: Reminder[] };
 
 export type SessionApi = {

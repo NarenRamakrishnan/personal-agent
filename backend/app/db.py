@@ -56,9 +56,11 @@ ADDED_COLUMNS = [
     ("sessions", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
     ("actions", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
     ("pending_chunks", "owner", "VARCHAR NOT NULL DEFAULT 'default'"),
+    ("reminders", "repeat", "VARCHAR"),
+    ("reminders", "repeat_of", "VARCHAR"),
 ]
 # create_all only indexes the tables it creates, so an added indexed column needs its own.
-ADDED_INDEXES = [(t, "owner") for t in ("reminders", "sessions", "actions", "pending_chunks")]
+ADDED_INDEXES = [(t, "owner") for t in ("reminders", "sessions", "actions", "pending_chunks")] + [("reminders", "repeat_of")]
 
 
 def _add_missing_columns(eng) -> None:

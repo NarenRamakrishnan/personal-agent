@@ -25,6 +25,6 @@ export const privacyApi = {
   },
   async deleteHistory() {
     if (!USE_MOCKS) await request("/history?confirm=delete-everything", "DELETE");
-    else await AsyncStorage.setItem(MOCK_REMINDERS_KEY, "[]");
+    else { await AsyncStorage.setItem(MOCK_REMINDERS_KEY, "[]"); await AsyncStorage.removeItem("mock-memories"); }
   },
 };

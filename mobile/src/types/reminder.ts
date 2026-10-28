@@ -20,7 +20,11 @@ export type Reminder = {
   completed: boolean;
   lastNotifiedAt?: string;
   snoozedUntil?: string;
+  // Comes back after it's done: the backend makes the next one when this one is completed.
+  repeat?: ReminderRepeat;
 };
+
+export type ReminderRepeat = "daily" | "weekly" | "monthly";
 
 export type ParsedReminder = {
   intent: "create_reminder";
@@ -28,5 +32,6 @@ export type ParsedReminder = {
   deadline?: string;
   triggerType: ReminderTriggerType;
   location?: ReminderLocation;
+  repeat?: ReminderRepeat;
   additional?: ParsedReminder[];
 };

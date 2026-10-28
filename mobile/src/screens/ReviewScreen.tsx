@@ -3,11 +3,12 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { actionsApi } from "../api/actions";
+import { memoryApi } from "../api/memories";
 import { sessionApi } from "../api/sessions";
 import { AsyncButton, Badge, Button, Card, FadeIn, Notice, Page, ScreenTitle, SectionHeader } from "../components/Controls";
 import { RootStackParamList } from "../navigation/types";
 import { contextApi } from "../api/client";
-import { missingInfo, triggerText } from "../services/format";
+import { memoryTitle, memoryUse, missingInfo, triggerText } from "../services/format";
 import { locationEnabled, turnOnLocation } from "../services/locationLifecycle";
 import { enableNotifications, notificationStatus, NotificationStatus, reconcileNotifications } from "../services/notifications";
 import { colors, radii, spacing, type, themedStyles } from "../theme";
@@ -21,7 +22,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Review"> & {
 };
 
 // What the person asked to change here. Nothing is applied until Done, so every choice can be undone.
-type Pending = "delete" | "reopen" | "discard";
+type Pending = "delete" | "reopen" | "discard" | "forget";
 
 export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate, onRefresh }: Props) {
   const { detail, unsent = [] } = route.params;
@@ -66,7 +67,8 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
   const askLocation = locationOn === false && active.some(r => r.location);
   const needsDetail = [...newItems, ...updated].filter(r => !pending[r.id] && missingInfo(r, savedNames)).length;
   const drafts = detail.actions.filter(a => a.status === "needs_approval" && (!stillPending || stillPending.has(a.id) || a.id.startsWith("mock-")));
-  const total = newItems.length + updated.length + completed.length + drafts.length;
+  const learned = detail.learned ?? [];
+  const total = newItems.length + updated.length + completed.length + drafts.length + learned.length;
 
   const mark = (id: string, action: Pending, label: string) => { setPending(p => ({ ...p, [id]: action })); setLastUndo({ id, label }); };
   const undo = (id: string) => { setPending(p => { const next = { ...p }; delete next[id]; return next; }); setLastUndo(undefined); };
@@ -79,6 +81,7 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
       try {
         if (action === "delete") await onDelete(id);
         else if (action === "reopen") await onUpdate(id, { completed: false });
+        else if (action === "forget") await memoryApi.forget(id);
         else await actionsApi.cancel(id);
         setSaved(s => ({ ...s, [id]: true }));
       } catch { failures[id] = true; }
@@ -96,12 +99,13 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
     updated.length ? `${updated.length} updated` : "",
     completed.length ? `${completed.length} done` : "",
     drafts.length ? `${drafts.length} email ${drafts.length === 1 ? "draft" : "drafts"}` : "",
+    learned.length ? `${learned.length} learned` : "",
   ].filter(Boolean);
 
   const reminderCard = (r: Reminder, kind: "new" | "updated" | "completed") => {
     const state = pending[r.id];
     const miss = state || kind === "completed" ? undefined : missingInfo(r, savedNames);
-    const edit = () => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: r.title, deadline: r.deadline, triggerType: r.triggerType, location: r.location }, existing: r });
+    const edit = () => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: r.title, deadline: r.deadline, triggerType: r.triggerType, location: r.location, repeat: r.repeat }, existing: r });
     const fixTitle = miss?.kind === "time" ? "Add a time" : miss?.kind === "place" ? "Add a place" : miss?.kind === "both" ? "Add a time or place" : miss ? `Save where ${miss.label.replace(/^Where is |\?$/g, "")} is` : "";
     return <Card key={r.id} style={state ? { backgroundColor: colors.surfaceSubtle } : miss ? { borderColor: colors.accent } : undefined}>
       <View style={styles.rowBetween}>
@@ -179,6 +183,19 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
                 <Button title="Delete draft" variant="dangerGhost" compact onPress={() => mark(a.id, "discard", "The email draft will be deleted.")} />
               </View>
             </>}
+        </Card>);
+      })}
+    </View> : null}
+    {learned.length ? <View style={styles.section}>
+      <SectionHeader title="Heedly learned" count={learned.length} />
+      {learned.map(m => {
+        const state = pending[m.id];
+        return arrive(<Card key={m.id} style={state ? { backgroundColor: colors.surfaceSubtle } : undefined}>
+          <View style={styles.rowBetween}><Badge label={m.kind === "person" ? "Person" : "Usual place"} tone="new" />{saved[m.id] ? <Badge label="Forgotten" tone="neutral" /> : null}</View>
+          <Text style={[type.cardTitle, state && { color: colors.textSecondary }]}>{memoryTitle(m)}</Text>
+          <Text style={type.meta}>{state ? "Will be forgotten" : memoryUse(m)}</Text>
+          {state ? <Button title="Undo" variant="ghost" compact style={styles.left} onPress={() => undo(m.id)} accessibilityLabel={`Keep ${m.label}`} />
+            : <Button title="Forget" variant="dangerGhost" compact style={styles.left} accessibilityLabel={`Forget ${m.label}`} onPress={() => mark(m.id, "forget", `Heedly will forget ${m.label}.`)} />}
         </Card>);
       })}
     </View> : null}

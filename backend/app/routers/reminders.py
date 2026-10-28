@@ -3,7 +3,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app import settings
+from app import memory, settings
 from app.db import get_session
 from app.models import Reminder, ReminderCreate, ReminderRow, ReminderUpdate, readable, row_from_create
 from app.security import current_owner
@@ -74,8 +74,15 @@ def update_reminder(reminder_id: str, body: ReminderUpdate, db: Session = Depend
         Reminder.model_validate({**row.model_dump(), **changes})
     except ValidationError as e:
         raise HTTPException(status_code=422, detail="; ".join(x["msg"] for x in e.errors()))
+    was_done = row.completed
     for key, value in changes.items():
         setattr(row, key, value)
+    # A repeating reminder comes back: finishing it makes the next one, and reopening it
+    # (an undo) takes that one back, in the same commit.
+    if row.completed and not was_done:
+        memory.make_next(db, row)
+    elif was_done and not row.completed:
+        memory.take_back_next(db, row)
     db.add(row)
     db.commit()
     db.refresh(row)

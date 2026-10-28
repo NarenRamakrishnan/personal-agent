@@ -16,6 +16,8 @@ from sqlalchemy import JSON, Column, DateTime, TypeDecorator
 from sqlmodel import Field, SQLModel
 
 TriggerType = Literal["time", "location", "time_and_location"]
+# A reminder that comes back after it's done: the next one is made when this one is completed.
+RepeatRule = Literal["daily", "weekly", "monthly"]
 LocationType = Literal["coordinate", "place", "category", "saved_place"]
 # Mobile sends category as a free string, so the wire type stays `str`.
 # The internal taxonomy (grocery_store, pharmacy, gym ...) lives in Module 07.
@@ -94,6 +96,7 @@ class ReminderBase(ApiModel):
     session_id: str | None = Field(default=None, max_length=SESSION_ID_MAX)
     # The words the reminder was parsed from, shown in the review list.
     source_text: str | None = Field(default=None, max_length=5000)
+    repeat: RepeatRule | None = None
 
     @model_validator(mode="after")
     def check_trigger(self):
@@ -139,6 +142,7 @@ class ReminderUpdate(ApiModel):
     completed: bool | None = None
     last_notified_at: datetime | None = None
     snoozed_until: datetime | None = None
+    repeat: RepeatRule | None = None
 
     _tz = field_validator("deadline", "last_notified_at", "snoozed_until")(
         lambda cls, v: require_tz(v)
@@ -165,6 +169,10 @@ class ReminderRow(SQLModel, table=True):
     # The listening session that last updated or completed this reminder by voice, so
     # that session's review shows the change and the person can undo it.
     changed_in_session: str | None = Field(default=None, index=True)
+    repeat: str | None = None
+    # For the next one of a repeating reminder: the reminder whose completion made it,
+    # so un-completing that one can take the new one back.
+    repeat_of: str | None = Field(default=None, index=True)
 
     def to_api(self) -> Reminder:
         return Reminder.model_validate(self.model_dump())
@@ -340,6 +348,8 @@ class SessionDetail(SessionInfo):
     pending_chunks: int = 0
     # Reminders from earlier sessions that this session updated or completed.
     changed: list[Reminder] = Field(default_factory=list)
+    # What Heedly learned in this session (who someone is, where they usually shop).
+    learned: list["Memory"] = Field(default_factory=list)
 
 
 class SavedPlaceRow(SQLModel, table=True):
@@ -629,3 +639,73 @@ class SettingsUpdate(ApiModel):
     delete_transcripts_after_days: int | None = Field(default=None, ge=1, le=365)  # null = no extra limit
 
     _tz = field_validator("timezone")(lambda cls, v: check_timezone(v))
+
+
+# Memory (what Heedly learns about the person). Each row is one fact the person stated:
+# who someone is ("Mom", her email) or where they usually do an errand ("groceries" at
+# Trader Joe's). Facts link to reminders by their words, which makes a small graph.
+MemoryKind = Literal["person", "place"]
+PlaceType = Literal["place", "saved_place"]
+
+
+class Memory(ApiModel):
+    id: str
+    kind: MemoryKind
+    label: str
+    alias: str | None = None
+    email: str | None = None
+    place_name: str | None = None
+    place_type: PlaceType | None = None
+    session_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MemoryCreate(ApiModel):
+    """A fact the person adds or puts back (an undone forget)."""
+
+    kind: MemoryKind
+    label: str = Field(min_length=1, max_length=60)
+    alias: str | None = Field(default=None, max_length=60)
+    email: str | None = Field(default=None, max_length=320)
+    place_name: str | None = Field(default=None, max_length=100)
+    place_type: PlaceType | None = None
+
+    @model_validator(mode="after")
+    def fits_kind(self):
+        if self.kind == "person" and (self.place_name or self.place_type):
+            raise ValueError("a person has no place")
+        if self.kind == "place" and (not self.place_name or self.email or self.alias):
+            raise ValueError("a place memory needs a place and nothing else")
+        return self
+
+
+class MemoryUpdate(ApiModel):
+    label: str | None = Field(default=None, min_length=1, max_length=60)
+    alias: str | None = Field(default=None, max_length=60)
+    email: str | None = Field(default=None, max_length=320)
+    place_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class MemoryRow(SQLModel, table=True):
+    __tablename__ = "memories"
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    owner: str = Field(default="default", index=True, sa_column_kwargs={"server_default": "default"})
+    kind: str
+    # Lookup form of the label ("my mom" -> "mom"), so the same fact said twice updates one row.
+    key: str = Field(index=True)
+    label: str
+    alias: str | None = None
+    email: str | None = None
+    place_name: str | None = None
+    place_type: str | None = None
+    session_id: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow, sa_column=Column(UTCDateTime, nullable=False))
+
+    def to_api(self) -> Memory:
+        return Memory.model_validate(self.model_dump())
+
+
+SessionDetail.model_rebuild()

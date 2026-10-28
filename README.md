@@ -17,16 +17,23 @@ NVIDIA Nemotron 3 Super on Nebius Token Factory.
 1. Tap **Listen** and talk normally. The phone's speech service turns each phrase into
    text (it may process audio online); only that text reaches this app's backend.
    **Type instead** does the same thing without a microphone.
-2. Each phrase goes to Nemotron with your open reminders, so it can create new
-   reminders ("call the dentist tomorrow at 9"), change one ("move the dentist to
-   Friday"), finish one ("I already got the milk") or draft an email ("write Alex that
-   I'm running late"). Reminders save as you go; the screen shows what was caught.
-3. Tap **Stop & review** for one list of everything new, updated and completed, plus
-   email drafts. Fix or delete anything, then tap Done. Email is never sent for you:
-   approving a draft only opens it in your mail app.
-4. Each reminder has a time trigger, a place trigger or both. The app schedules
-   notifications and geofences, so it fires when the time comes or you are near the
-   place.
+2. When you tap **Stop & review**, everything you said goes to Nemotron as a whole,
+   with your open reminders, so it can create new reminders ("call the dentist tomorrow
+   at 9"), change one ("actually move the dentist to Friday"), finish one ("I already got
+   the milk") or draft an email ("write Alex that I'm running late"). Corrections are
+   read in context.
+3. The review list shows everything new, updated and completed, email drafts and what
+   Heedly learned. Reminders missing a time or place are flagged with a one-tap fix.
+   Email is never sent for you: approving a draft only opens it in your mail app.
+4. Each reminder has a time trigger, a place trigger or both, and can repeat daily,
+   weekly or monthly (finishing one sets up the next). The app schedules notifications
+   and geofences, so it fires when the time comes or you are near the place.
+5. Heedly remembers what you tell it about your life: who someone is and their email
+   ("my mom's email is ..."), and where you usually do an errand ("I get groceries at
+   Trader Joe's"). Later, "email Mom" fills in her address and "buy milk" reminds you at
+   your store. An address or place is kept only if you actually said it. Settings →
+   What Heedly remembers shows each fact and the reminders it connects to, where you can
+   correct or forget it.
 
 This backend never receives raw audio. Apple, Google or the browser's speech service
 may process audio remotely; on-device-only recognition is not enforced. Saved reminders

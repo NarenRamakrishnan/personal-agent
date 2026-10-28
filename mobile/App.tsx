@@ -18,6 +18,7 @@ import { Reminder } from "./src/types/reminder";
 import { LocationScreen } from "./src/screens/LocationScreen";
 import { EmailScreen } from "./src/screens/EmailScreen";
 import { PrivacyScreen } from "./src/screens/PrivacyScreen";
+import { MemoryScreen } from "./src/screens/MemoryScreen";
 import { syncBackgroundRegions } from "./src/services/background";
 import { watchForegroundContext } from "./src/services/locationLifecycle";
 import { createReminderStore } from "./src/services/reminderStore";
@@ -78,6 +79,7 @@ export default function App() {
           <Stack.Screen name="Listen" options={{ title: "" }}>{(props) => <ListenScreen {...props} onSessionEnded={refresh} />}</Stack.Screen>
           <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} onRefresh={refresh} />}</Stack.Screen>
           <Stack.Screen name="Settings" options={{ title: "" }}>{(props) => <SettingsScreen {...props} reminders={reminders} />}</Stack.Screen>
+          <Stack.Screen name="Memory" options={{ title: "" }}>{(props) => <MemoryScreen {...props} reminders={reminders} />}</Stack.Screen>
           <Stack.Screen name="Location" component={LocationScreen} options={{ title: "" }} />
           <Stack.Screen name="Email" component={EmailScreen} options={{ title: "" }} />
           <Stack.Screen name="Privacy" options={{ title: "" }}>{() => <PrivacyScreen onChanged={refresh} />}</Stack.Screen>

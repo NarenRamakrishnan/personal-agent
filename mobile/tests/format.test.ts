@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupReminders, isOverdue, missingInfo, triggerText, whenText, whereText } from "../src/services/format";
+import { groupReminders, isOverdue, linkedReminders, memoryTitle, memoryUse, missingInfo, repeatText, triggerText, whenText, whereText } from "../src/services/format";
 import { Reminder } from "../src/types/reminder";
 
 const now = new Date(2026, 9, 27, 14, 0); // Tue Oct 27 2026, 2 PM local
@@ -71,5 +71,30 @@ describe("missingInfo", () => {
     expect(missingInfo(r("d", { deadline: at(28, 9) }))).toBeUndefined();
     expect(missingInfo(r("e", { triggerType: "location", location: { type: "category", category: "pharmacy" } }))).toBeUndefined();
     expect(missingInfo(r("f", { completed: true }))).toBeUndefined();
+  });
+});
+
+describe("memory and repeats", () => {
+  const at = "2026-10-28T12:00:00Z";
+  const mom = { id: "m1", kind: "person" as const, label: "Mom", alias: "Priya", email: "priya@example.com", createdAt: at, updatedAt: at };
+  const tj = { id: "m2", kind: "place" as const, label: "groceries", placeName: "Trader Joe's", placeType: "place" as const, createdAt: at, updatedAt: at };
+  const r = (id: string, title: string, extra: object = {}) => ({ id, title, createdAt: at, triggerType: "time" as const, completed: false, ...extra });
+
+  it("reads a fact the way a person would say it", () => {
+    expect(memoryTitle(mom)).toBe("Mom is Priya");
+    expect(memoryUse(mom)).toBe("Emails to Mom go to priya@example.com.");
+    expect(memoryTitle(tj)).toBe("Groceries at Trader Joe's");
+    expect(memoryTitle({ ...tj, label: "laundry", placeName: "home", placeType: "saved_place" })).toBe("Laundry at Home");
+  });
+
+  it("links a fact to the reminders it's about, by whole words", () => {
+    const reminders = [r("a", "Call Mom"), r("b", "Text Priya happy birthday"), r("c", "Buy milk", { location: { type: "place", name: "Trader Joe's" } }), r("d", "Momentum workout")];
+    expect(linkedReminders(mom, reminders).map(x => x.id)).toEqual(["a", "b"]);
+    expect(linkedReminders(tj, reminders).map(x => x.id)).toEqual(["c"]);
+  });
+
+  it("says when a reminder repeats", () => {
+    expect(triggerText(r("t", "Trash", { deadline: "2026-11-02T13:00:00Z", repeat: "weekly" }), new Date(at))).toMatch(/ · Repeats weekly$/);
+    expect(repeatText({})).toBe("");
   });
 });

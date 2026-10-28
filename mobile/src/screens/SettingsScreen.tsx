@@ -57,6 +57,10 @@ export function SettingsScreen({ navigation, reminders }: Props) {
       </View>
     </Group>
 
+    <Group title="Memory">
+      <LinkRow title="What Heedly remembers" summary="People, usual places and repeating reminders it has learned from you." onPress={() => navigation.navigate("Memory")} last />
+    </Group>
+
     <Group title="Location & saved places">
       <LinkRow title="Location reminders" summary="Turn on place reminders and save spots like home or work." onPress={() => navigation.navigate("Location")} last />
     </Group>

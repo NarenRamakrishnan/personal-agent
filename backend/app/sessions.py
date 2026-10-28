@@ -13,6 +13,7 @@ from sqlmodel import Session, func, or_, select
 from app import config, retention
 from app.models import (
     ActionRow,
+    MemoryRow,
     PendingChunkRow,
     ReminderRow,
     SessionDetail,
@@ -145,12 +146,15 @@ def detail(db: Session, row: SessionRow) -> SessionDetail:
                or_(ReminderRow.session_id.is_(None), ReminderRow.session_id != row.id))
         .order_by(ReminderRow.created_at, ReminderRow.id)
     )
+    learned = db.exec(select(MemoryRow).where(MemoryRow.session_id == row.id, MemoryRow.owner == row.owner)
+                      .order_by(MemoryRow.created_at, MemoryRow.id))
     info = SessionInfo.model_validate(row.model_dump())
     return SessionDetail(
         **info.model_dump(),
         reminders=readable(reminders),
         actions=[a.to_api() for a in actions],
         pending_chunks=pending,
+        learned=[m.to_api() for m in learned],
         changed=readable(changed),
     )
 

@@ -6,6 +6,7 @@ from app import settings
 from app.db import get_session
 from app.models import (
     ActionRow,
+    MemoryRow,
     PendingChunkRow,
     PrivacyCounts,
     PrivacyInfo,
@@ -72,7 +73,7 @@ def delete_session_transcript(session_id: str, db: Session = Depends(get_session
 def delete_session(session_id: str, db: Session = Depends(get_session), owner: str = Depends(current_owner)):
     """Delete a session and everything it produced."""
     _session_or_404(db, session_id, owner)
-    for model in (ReminderRow, ActionRow, PendingChunkRow):
+    for model in (ReminderRow, ActionRow, PendingChunkRow, MemoryRow):
         db.execute(delete(model).where(model.owner == owner, model.session_id == session_id))
     db.execute(delete(SessionRow).where(SessionRow.id == session_id))
     db.commit()
@@ -86,12 +87,13 @@ def delete_history(
     db: Session = Depends(get_session),
     owner: str = Depends(current_owner),
 ):
-    """Delete all of this device's sessions, reminders, drafts and queued chunks. Saved places only
+    """Delete all of this device's sessions, reminders, drafts, queued chunks and memories. Saved places only
     if asked. Needs ?confirm=delete-everything so a stray call can't wipe it."""
     if confirm != "delete-everything":
         raise HTTPException(status_code=400, detail="Add ?confirm=delete-everything to proceed")
     counts = {}
-    models = [("reminders", ReminderRow), ("actions", ActionRow), ("pendingChunks", PendingChunkRow), ("sessions", SessionRow)]
+    models = [("reminders", ReminderRow), ("actions", ActionRow), ("pendingChunks", PendingChunkRow), ("sessions", SessionRow),
+              ("memories", MemoryRow)]
     if saved_places:
         models.append(("savedPlaces", SavedPlaceRow))
     for label, model in models:

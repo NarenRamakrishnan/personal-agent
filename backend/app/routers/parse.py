@@ -39,6 +39,8 @@ def parse_text(body: ParseRequest, db: Session = Depends(get_session), owner: st
     tz_name = settings.timezone_for(prefs, body.timezone)
     with llm.time_limit(config.REQUEST_BUDGET_S), llm.charged_to(owner):  # past it, the words are kept to fix
         candidates = parser.parse(body.text, body.now or utcnow(), "unsaved", tz_name, times=prefs.times)
+    # This path saves nothing, so a fact the model noticed here isn't kept either.
+    candidates = [c for c in candidates if isinstance(c, ReminderCreate)]
     if not candidates:
         raise HTTPException(status_code=422, detail="No reminder found in that text")
     first, rest = to_parsed(candidates[0]), [to_parsed(c) for c in candidates[1:]]

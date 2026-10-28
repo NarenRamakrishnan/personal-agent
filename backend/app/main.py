@@ -11,7 +11,7 @@ from app import retention
 from app.db import engine, init_db
 from sqlmodel import Session
 
-from app.routers import actions, devices, evaluate, parse, privacy, reminders, sessions, settings, usage
+from app.routers import actions, devices, evaluate, memories, parse, privacy, reminders, sessions, settings, usage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -74,6 +74,7 @@ app.include_router(sessions.router)
 app.include_router(usage.router)
 app.include_router(privacy.router)
 app.include_router(settings.router)
+app.include_router(memories.router)
 
 
 @app.get("/", include_in_schema=False)

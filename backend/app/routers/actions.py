@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
-from app import config, emailer, llm, settings
+from app import config, emailer, llm, memory, settings
 from app.db import get_session
 from app.models import Action, ActionRow, EmailRequest, EmailUpdate, utcnow
 from app.parser import resolve_tz
@@ -29,9 +29,11 @@ def create_email_draft(body: EmailRequest, db: Session = Depends(get_session), o
         raise HTTPException(status_code=422, detail="That doesn't look like a request to send an email")
     except llm.LLMError:
         raise HTTPException(status_code=503, detail="Drafting is temporarily unavailable")
+    # "Email Mom": the address the person taught Heedly for Mom, never one the model made up.
+    to = draft.to or memory.email_for(db, owner, draft.to_name)
     row = ActionRow(
         owner=owner, session_id=body.session_id, source_text=body.text if prefs.keep_transcripts else None,
-        to=draft.to, to_name=draft.to_name, subject=draft.subject, body=draft.body,
+        to=to, to_name=draft.to_name, subject=draft.subject, body=draft.body,
     )
     db.add(row)
     db.commit()

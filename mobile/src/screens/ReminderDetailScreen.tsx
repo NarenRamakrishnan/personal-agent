@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { Badge, Button, Card, Chip, Chips, Notice, Page } from "../components/Controls";
 import { RootStackParamList } from "../navigation/types";
-import { isOverdue, triggerText, whenText, whereText } from "../services/format";
+import { isOverdue, repeatText, triggerText, whenText, whereText } from "../services/format";
 import { timezoneLabel } from "../services/humanDate";
 import { colors, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
@@ -51,8 +51,9 @@ export function ReminderDetailScreen({ navigation, route, reminders, onComplete,
       {reminder.deadline ? <Row label="When" value={new Date(reminder.deadline).toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} detail={timezoneLabel(new Date(reminder.deadline))} /> : null}
       {place ? <Row label="Place" value={place.charAt(0).toUpperCase() + place.slice(1)} detail={reminder.location?.radiusMeters ? `Within ${reminder.location.radiusMeters} meters` : undefined} /> : null}
       {snoozed ? <Row label="Snoozed until" value={whenText(reminder.snoozedUntil!)} /> : null}
+      {reminder.repeat ? <Row label="Repeats" value={repeatText(reminder)} detail="When you finish it, Heedly sets up the next one." /> : null}
     </Card>
-    <Button title="Edit reminder" variant="secondary" onPress={() => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: reminder.title, deadline: reminder.deadline, triggerType: reminder.triggerType, location: reminder.location }, existing: reminder })} />
+    <Button title="Edit reminder" variant="secondary" onPress={() => navigation.navigate("ConfirmReminder", { parsed: { intent: "create_reminder", title: reminder.title, deadline: reminder.deadline, triggerType: reminder.triggerType, location: reminder.location, repeat: reminder.repeat }, existing: reminder })} />
     {!reminder.completed ? <View style={{ gap: spacing.xs }}>
       <Text accessibilityRole="header" style={type.sectionTitle}>Snooze</Text>
       <Chips>

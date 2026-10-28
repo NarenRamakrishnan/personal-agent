@@ -1,3 +1,4 @@
+import { Memory } from "../types/memory";
 import { Reminder, ReminderLocation } from "../types/reminder";
 
 const CATEGORY_NAMES: Record<string, string> = {
@@ -34,11 +35,15 @@ export function whereText(location?: ReminderLocation): string {
   return name ? `at ${name}` : "at a saved spot";
 }
 
+export const repeatText = (reminder: Pick<Reminder, "repeat">) =>
+  reminder.repeat ? { daily: "Repeats daily", weekly: "Repeats weekly", monthly: "Repeats monthly" }[reminder.repeat] : "";
+
 export function triggerText(reminder: Reminder, now = new Date()): string {
   const when = reminder.deadline ? whenText(reminder.deadline, now) : "";
   const where = whereText(reminder.location);
-  if (when && where) return `${when} · ${where}`;
-  return when || (where ? `When you're ${where}` : "No time or place");
+  const repeat = repeatText(reminder);
+  const base = when && where ? `${when} · ${where}` : when || (where ? `When you're ${where}` : "No time or place");
+  return repeat ? `${base} · ${repeat}` : base;
 }
 
 export const isOverdue = (reminder: Reminder, now = new Date()) =>
@@ -91,4 +96,25 @@ export function dueNow(reminders: Reminder[], now = new Date()): Reminder[] {
     const at = Math.max(Date.parse(reminder.deadline), reminder.snoozedUntil ? Date.parse(reminder.snoozedUntil) : 0);
     return Number.isFinite(at) && at <= now.getTime() && at >= recent;
   }).sort((a, b) => Date.parse(b.deadline!) - Date.parse(a.deadline!));
+}
+
+// How a remembered fact reads, in the review list and on the memory page.
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+export function memoryTitle(m: Memory): string {
+  if (m.kind === "person") return m.alias ? `${cap(m.label)} is ${m.alias}` : cap(m.label);
+  return `${cap(m.label)} at ${m.placeType === "saved_place" ? cap(m.placeName ?? "") : m.placeName}`;
+}
+export function memoryUse(m: Memory): string {
+  if (m.kind === "person") return m.email ? `Emails to ${cap(m.label)} go to ${m.email}.` : `"${m.alias}" and "${cap(m.label)}" mean the same person.`;
+  return `Reminders about ${m.label} go off near ${m.placeType === "saved_place" ? cap(m.placeName ?? "") : m.placeName}.`;
+}
+
+// Reminders that a fact is about, by their words: the edges of the memory graph.
+export function linkedReminders(m: Memory, reminders: Reminder[]): Reminder[] {
+  const words = [m.label, m.alias, m.kind === "place" ? m.placeName : undefined].filter((w): w is string => !!w)
+    .map(w => w.toLowerCase().replace(/^(my|the) /, ""));
+  return reminders.filter(r => {
+    const text = `${r.title} ${r.location?.name ?? ""}`.toLowerCase();
+    return words.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(text));
+  });
 }

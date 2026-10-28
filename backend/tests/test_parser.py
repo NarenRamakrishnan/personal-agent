@@ -284,3 +284,42 @@ def test_errands_and_fragments_live(monkeypatch):
     for f in failures:
         print("  FAIL", f)
     assert passed >= len(ERRANDS) - 1, f"only {passed}/{len(ERRANDS)} passed"
+
+
+# Module 11: memories and repeats, against the real model.
+MEMORY_CASES = [
+    # (text, known lines, check)
+    ("My mom's name is Priya and her email is priya@example.com", None,
+     lambda rem, mem: not rem and any(m.kind == "person" and m.key == "mom" and m.alias == "Priya" and m.email == "priya@example.com" for m in mem)),
+    ("I always get my groceries at Trader Joe's", None,
+     lambda rem, mem: not rem and any(m.kind == "place" and m.place_name == "Trader Joe's" for m in mem)),
+    ("Remind me to take out the trash every Monday at 8pm", None,
+     lambda rem, mem: len(rem) == 1 and rem[0].repeat == "weekly" and rem[0].deadline is not None and rem[0].deadline.weekday() == 0),
+    ("I need to buy milk on the way home", ['- "groceries": they usually go to "Trader Joe\'s"'],
+     lambda rem, mem: len(rem) == 1 and rem[0].location is not None and rem[0].location.name == "Trader Joe's"),
+    ("My brother always shops at Costco", None, lambda rem, mem: not rem and not mem),
+    ("Call the dentist tomorrow at 9", None, lambda rem, mem: len(rem) == 1 and rem[0].repeat is None and not mem),
+    ("Email my mom that I'll be late", ['- person "Mom" (also called "Priya"), email on file'], lambda rem, mem: not mem),
+]
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not os.getenv("NEBIUS_API_KEY"), reason="needs NEBIUS_API_KEY")
+def test_memories_and_repeats_live(monkeypatch):
+    from app import memory
+
+    monkeypatch.setattr(config, "PARSER_MODE", "nebius")
+    now = datetime(2026, 10, 28, 15, 0, tzinfo=timezone.utc)
+    passed, failures = 0, []
+    for text, known, check in MEMORY_CASES:
+        out = parser.parse(text, now, "live", "America/New_York", fallback=False, known=known)
+        rem = [c for c in out if not isinstance(c, (parser.Change, memory.Learned))]
+        mem = [c for c in out if isinstance(c, memory.Learned)]
+        if check(rem, mem):
+            passed += 1
+        else:
+            failures.append((text, [(r.title, r.repeat, r.location) for r in rem], mem))
+    print(f"\nmemories/repeats: {passed}/{len(MEMORY_CASES)} passed")
+    for f in failures:
+        print("  FAIL", f)
+    assert passed >= len(MEMORY_CASES) - 1, f"only {passed}/{len(MEMORY_CASES)} passed"

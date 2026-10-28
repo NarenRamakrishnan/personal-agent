@@ -6,6 +6,7 @@ export type RootStackParamList = {
   Listen: { typing?: boolean } | undefined;
   Review: { detail: SessionDetail; unsent?: string[] };
   Settings: undefined;
+  Memory: undefined;
   Location: undefined;
   Privacy: undefined;
   Email: { text?: string; draftId?: string } | undefined;

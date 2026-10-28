@@ -19,6 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Home"> & {
 };
 
 const logo = require("../../assets/logo-mark.png");
+const doneLabel = (r: Reminder) => r.repeat ? `"${r.title}" done. The next one is set.` : `"${r.title}" marked done.`;
 
 export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, refreshing, error, onToggle, onSnooze, onRestore }: Props) {
   const [showDone, setShowDone] = useState(false);
@@ -63,7 +64,7 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
   const toggle = (reminder: Reminder) => {
     setToggleError("");
     onToggle(reminder).then(() => {
-      setUndo(reminder.completed ? undefined : { label: `"${reminder.title}" marked done.`, run: () => onToggle({ ...reminder, completed: true }) });
+      setUndo(reminder.completed ? undefined : { label: doneLabel(reminder), run: () => onToggle({ ...reminder, completed: true }) });
     }, e => setToggleError(e instanceof Error ? e.message : "Couldn't update that reminder."));
   };
 
@@ -86,7 +87,7 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
       {due.slice(0, 3).map(r => <View key={r.id} style={styles.dueRow}>
         <Text style={[type.cardTitle, { color: colors.accent }]}>{r.title}</Text>
         <View style={styles.dueActions}>
-          <AsyncButton title="Done" compact accessibilityLabel={`Mark ${r.title} as done`} action={async () => { await onToggle(r); setUndo({ label: `"${r.title}" marked done.`, run: () => onToggle({ ...r, completed: true }) }); }} />
+          <AsyncButton title="Done" compact accessibilityLabel={`Mark ${r.title} as done`} action={async () => { await onToggle(r); setUndo({ label: doneLabel(r), run: () => onToggle({ ...r, completed: true }) }); }} />
           <AsyncButton title="Snooze 10 min" variant="secondary" compact accessibilityLabel={`Snooze ${r.title} for 10 minutes`} action={() => onSnooze(r.id, new Date(Date.now() + 600000).toISOString())} />
         </View>
       </View>)}

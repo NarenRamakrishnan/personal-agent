@@ -8,7 +8,7 @@ import { whereText } from "../services/format";
 import { formatForField, parseHumanDate, timezoneLabel } from "../services/humanDate";
 import { colors, spacing, type } from "../theme";
 import { SavedPlace } from "../types/context";
-import { Reminder, ReminderLocation, ReminderTriggerType } from "../types/reminder";
+import { Reminder, ReminderLocation, ReminderRepeat, ReminderTriggerType } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ConfirmReminder"> & {
   onSave: (reminder: Reminder) => Promise<void>;
@@ -27,6 +27,10 @@ const CATEGORIES: { key: string; label: string }[] = [
   { key: "coffee_shop", label: "Coffee shop" }, { key: "restaurant", label: "Restaurant" }, { key: "shopping", label: "Shops" }, { key: "university", label: "Campus" },
 ];
 
+const REPEATS: { value: ReminderRepeat | undefined; label: string }[] = [
+  { value: undefined, label: "Doesn't repeat" }, { value: "daily", label: "Every day" }, { value: "weekly", label: "Every week" }, { value: "monthly", label: "Every month" },
+];
+
 const quick = (label: string, build: () => Date) => ({ label, build });
 const QUICK = [
   quick("Tomorrow at 9", () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; }),
@@ -39,6 +43,7 @@ export function ConfirmReminderScreen({ navigation, route, onSave, onUpdate }: P
   const [title, setTitle] = useState(parsed.title);
   const [when, setWhen] = useState(formatForField(parsed.deadline));
   const [trigger, setTrigger] = useState<ReminderTriggerType>(parsed.triggerType);
+  const [repeat, setRepeat] = useState<ReminderRepeat | undefined>(parsed.repeat ?? existing?.repeat);
   const startKind = parsed.location?.type === "coordinate" ? "place" : parsed.location?.type ?? "category";
   const [placeKind, setPlaceKind] = useState<Exclude<ReminderLocation["type"], "coordinate">>(startKind);
   const [placeName, setPlaceName] = useState(parsed.location?.type === "category" ? "" : parsed.location?.name ?? "");
@@ -66,7 +71,8 @@ export function ConfirmReminderScreen({ navigation, route, onSave, onUpdate }: P
     const what = title.trim() || "This reminder";
     const where = whereText(location());
     const date = parsedWhen && "date" in parsedWhen ? parsedWhen.date.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
-    if (trigger === "time") return date ? `${what} on ${date}.` : `${what}, once you pick a time.`;
+    const again = repeat && date ? ` Then ${{ daily: "every day", weekly: "every week", monthly: "every month" }[repeat]}, each time you finish it.` : "";
+    if (trigger === "time") return date ? `${what} on ${date}.${again}` : `${what}, once you pick a time.`;
     if (trigger === "location") return where ? `${what} when you're ${where}.` : `${what}, once you pick a place.`;
     return `${what}${where ? ` when you're ${where}` : ""}${date ? `, by ${date}` : ""}. Heedly reminds you near the place and when the time comes close.`;
   };
@@ -90,9 +96,10 @@ export function ConfirmReminderScreen({ navigation, route, onSave, onUpdate }: P
     setSaving(true);
     try {
       // The API clears a field on an explicit null; an omitted field is left as it was.
-      if (existing) await onUpdate(existing.id, { title: title.trim(), deadline: deadline ?? null, triggerType: trigger, location: place ?? null,
+      const repeats = deadline ? repeat ?? null : null;
+      if (existing) await onUpdate(existing.id, { title: title.trim(), deadline: deadline ?? null, triggerType: trigger, location: place ?? null, repeat: repeats,
         ...(deadline !== existing.deadline ? { snoozedUntil: null, lastNotifiedAt: null } : {}) } as unknown as Partial<Reminder>);
-      else await onSave({ id, title: title.trim(), createdAt: new Date().toISOString(), deadline, triggerType: trigger, location: place, completed: false });
+      else await onSave({ id, title: title.trim(), createdAt: new Date().toISOString(), deadline, triggerType: trigger, location: place, completed: false, ...(repeats ? { repeat: repeats } : {}) });
       if (!existing && parsed.additional?.length) navigation.replace("ConfirmReminder", { parsed: { ...parsed.additional[0], additional: parsed.additional.slice(1) } });
       else navigation.goBack();
     } catch (e) { setErrors({ save: e instanceof Error ? e.message : "Couldn't save. Try again." }); }
@@ -118,6 +125,8 @@ export function ConfirmReminderScreen({ navigation, route, onSave, onUpdate }: P
       <Field label="When" value={when} onChangeText={setWhen} placeholder="Oct 30, 2026 at 9:00 AM" error={errors.when}
         helper={parsedWhen && "date" in parsedWhen ? `${parsedWhen.date.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} · ${timezoneLabel(parsedWhen.date)}` : "Type a day and time, like \"tomorrow at 9\" or \"Oct 30 at 2pm\"."} />
       <Chips>{QUICK.map(q => <Chip key={q.label} label={q.label} action accessibilityLabel={`Set time to ${q.label}`} onPress={() => setWhen(formatForField(q.build().toISOString()))} />)}</Chips>
+      <Text style={type.fieldLabel}>Repeat</Text>
+      <Chips>{REPEATS.map(r => <Chip key={r.label} label={r.label} selected={repeat === r.value} onPress={() => setRepeat(r.value)} accessibilityLabel={`Repeat: ${r.label}`} />)}</Chips>
     </View> : null}
 
     {needsPlace ? <View style={{ gap: spacing.xs }}>
