@@ -42,6 +42,7 @@ FULL = {
     "id": "c1", "title": "Return books", "description": "d", "createdAt": "2026-10-01T10:00:00Z",
     "deadline": "2026-10-02T17:00:00Z", "triggerType": "time_and_location", "completed": False,
     "lastNotifiedAt": "2026-10-01T11:00:00Z", "snoozedUntil": "2026-10-01T12:00:00Z", "repeat": "weekly",
+    "sourceText": "return the books tomorrow at 5",
     "location": {"type": "category", "name": "Library", "category": "grocery_store",
                  "latitude": 42.39, "longitude": -72.52, "radiusMeters": 150},
 }
