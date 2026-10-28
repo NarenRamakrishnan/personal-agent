@@ -22,6 +22,17 @@ describe("parseHumanDate", () => {
     ["6:30 pm", local(2026, 9, 27, 18, 30)],
     ["Jan 5 at 10am", local(2027, 0, 5, 10)],
     ["Dec 31, 2026 at 11:59 PM", local(2026, 11, 31, 23, 59)],
+    // The ways people actually type dates and times into a box.
+    ["10/30 3pm", local(2026, 9, 30, 15)],
+    ["10/30", local(2026, 9, 30, 9)],
+    ["11/3/2026 at 4:05 pm", local(2026, 10, 3, 16, 5)],
+    ["1/5", local(2027, 0, 5, 9)],
+    ["in 2 hours", now.getTime() + 2 * 3600000],
+    ["in 30 minutes", now.getTime() + 30 * 60000],
+    ["in 45 mins", now.getTime() + 45 * 60000],
+    ["in an hour", now.getTime() + 3600000],
+    ["in 3 days", now.getTime() + 3 * 86400000],
+    ["9.30am tomorrow", local(2026, 9, 28, 9, 30)],
   ])("%s", (text, expected) => { expect(at(text)).toBe(expected); });
 
   it.each([
@@ -30,6 +41,7 @@ describe("parseHumanDate", () => {
     ["Feb 30 at 9am", "doesn't exist"],
     ["tomorrow at 25:00", "time doesn't look right"],
     ["tomorrow at 13pm", "time doesn't look right"],
+    ["13/45", "doesn't exist"],
   ])("rejects %j", (text, message) => {
     const result = parseHumanDate(text, now);
     expect("error" in result && result.error).toMatch(message);

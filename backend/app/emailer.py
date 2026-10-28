@@ -27,6 +27,17 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Whole addresses as they appear in speech, so a fragment of one (smith@... from
 # john.smith@...) is a different mailbox and does not count as spoken.
 SPOKEN_ADDRESS_RE = re.compile(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+")
+# Speech-to-text writes an address the way it is said: "priya at example dot com",
+# "john dot smith at umass dot edu". At least one "dot" after "at" is required, so
+# "remind me at home" never turns into an address.
+_PART = r"[A-Za-z0-9_%+\-]+"
+SAID_ALOUD_RE = re.compile(rf"\b({_PART}(?:\s+dot\s+{_PART})*)\s+at\s+({_PART}(?:\s+dot\s+{_PART})+)\b", re.IGNORECASE)
+
+
+def _written(text: str) -> str:
+    """The text with any address said aloud written the usual way."""
+    dots = lambda s: re.sub(r"\s+dot\s+", ".", s, flags=re.IGNORECASE)  # noqa: E731
+    return SAID_ALOUD_RE.sub(lambda m: f"{dots(m.group(1))}@{dots(m.group(2))}", text)
 
 
 class NoEmailRequest(Exception):
@@ -79,7 +90,7 @@ def _spoken_address(candidate, source_text: str) -> str | None:
     c = _clean(candidate, 320)
     if not c or not EMAIL_RE.match(c):
         return None
-    spoken = {m.group(0).lower() for m in SPOKEN_ADDRESS_RE.finditer(source_text)}
+    spoken = {m.group(0).lower() for text in (source_text, _written(source_text)) for m in SPOKEN_ADDRESS_RE.finditer(text)}
     return c if c.lower() in spoken else None
 
 

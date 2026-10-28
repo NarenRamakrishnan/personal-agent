@@ -16,6 +16,11 @@ export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> })
   const [info, setInfo] = useState<PrivacyInfo>(); const [settings, setSettings] = useState<PrivacySettings>();
   const [confirm, setConfirm] = useState(false); const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [confirmForget, setConfirmForget] = useState(false);
+  const forget = async () => {
+    await cancelAllNotifications(); await credentials.forgetAll("device."); await AsyncStorage.removeItem("context-notification-ledger");
+    if (typeof window !== "undefined") window.location.reload();
+  };
   const load = async () => { setLoadError(""); try { setInfo(await privacyApi.info()); setSettings(await privacyApi.settings()); } catch { setLoadError("We couldn't load your privacy settings."); } };
   useEffect(() => { void load(); }, []);
   return <Page>
@@ -53,11 +58,16 @@ export function PrivacyScreen({ onChanged }: { onChanged: () => Promise<void> })
 
     {Platform.OS === "web" && !USE_MOCKS ? <Card>
       <Text style={type.cardTitle}>Shared computer?</Text>
-      <Text style={type.meta}>Forgetting this browser removes its key, so the next visit starts a fresh, empty space. Your reminders stay on Heedly's backend but this browser can't open them again. To erase them, delete your data first.</Text>
-      <AsyncButton title="Forget this browser" variant="secondary" compact action={async () => {
-        await cancelAllNotifications(); await credentials.forgetAll("device."); await AsyncStorage.removeItem("context-notification-ledger");
-        if (typeof window !== "undefined") window.location.reload();
-      }} />
+      <Text style={type.meta}>Forgetting this browser removes its key, so the next visit starts a fresh, empty space. You'll be asked whether to erase your reminders too or leave them on Heedly's backend, where this browser can't open them again.</Text>
+      {!confirmForget ? <Button title="Forget this browser" variant="secondary" compact onPress={() => setConfirmForget(true)} />
+        : <Notice tone="danger" title="Forget this browser?">
+          <Text style={[type.body, { color: colors.danger }]}>This can't be undone. Afterwards, nobody can open these reminders from this browser again, including you.</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs }}>
+            <Button title="Keep using it" variant="secondary" compact onPress={() => setConfirmForget(false)} />
+            <AsyncButton title="Erase my data, then forget" variant="danger" compact action={async () => { await privacyApi.deleteHistory(); await forget(); }} />
+            <AsyncButton title="Just forget" variant="dangerGhost" compact accessibilityLabel="Forget this browser and keep the data on Heedly's backend" action={forget} />
+          </View>
+        </Notice>}
     </Card> : null}
 
     {message ? <Notice tone="success">{message}</Notice> : null}

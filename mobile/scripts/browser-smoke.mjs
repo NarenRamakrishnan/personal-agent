@@ -18,7 +18,7 @@ function child(command, args, options = {}) { const process = spawn(command, arg
 function completed(process) { return new Promise((done, reject) => { process.once("error", reject); process.once("exit", code => code === 0 ? done() : reject(new Error(`Child command failed (${code}).`))); }); }
 let staticServer;
 try {
-  const api = child(join(backend, ".venv/bin/python"), ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(port)], { cwd: backend, stdio: "ignore", env: { ...env, DATABASE_URL: `sqlite:///${join(temporary, "browser.db")}`, PARSER_MODE: "mock", NEBIUS_API_KEY: "", API_KEY: "isolated-browser-auth-required", STORE_TRANSCRIPTS: "true" } });
+  const api = child(join(backend, ".venv/bin/python"), ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(port)], { cwd: backend, stdio: "ignore", env: { ...env, DATABASE_URL: `sqlite:///${join(temporary, "browser.db")}`, PARSER_MODE: "mock", NEBIUS_API_KEY: "", API_KEY: "isolated-browser-auth-required", STORE_TRANSCRIPTS: "true", DEVICE_SIGNUPS_PER_HOUR: "500" } });
   let ready = false;
   for (let i = 0; i < 100; i++) { if (api.exitCode !== null) throw new Error("Isolated backend could not start."); try { ready = (await fetch(`${apiURL}/health`)).ok; } catch {} if (ready) break; await new Promise(done => setTimeout(done, 200)); }
   if (!ready) throw new Error("Isolated backend startup timed out.");

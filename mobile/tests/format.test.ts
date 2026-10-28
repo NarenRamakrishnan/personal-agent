@@ -47,6 +47,11 @@ describe("groupReminders", () => {
     expect(groups.place.map(x => x.id)).toEqual(["milk"]);
     expect(groups.done.map(x => x.id)).toEqual(["done"]);
   });
+  it("keeps reminders with no time and no place apart from place reminders, so they can be fixed", () => {
+    const groups = groupReminders([r("bread"), r("milk", { location: { type: "category", category: "grocery_store" }, triggerType: "location" })], now);
+    expect(groups.needs.map(x => x.id)).toEqual(["bread"]);
+    expect(groups.place.map(x => x.id)).toEqual(["milk"]);
+  });
   it("flags overdue only for open reminders", () => {
     expect(isOverdue(r("x", { deadline: at(26, 9) }), now)).toBe(true);
     expect(isOverdue(r("y", { deadline: at(26, 9), completed: true }), now)).toBe(false);

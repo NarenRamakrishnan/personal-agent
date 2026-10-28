@@ -54,8 +54,9 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(timer); }, []);
   const due = useMemo(() => dueNow(reminders, now), [reminders, now]);
   const groups = useMemo(() => groupReminders(reminders), [reminders]);
-  const active = groups.today.length + groups.upcoming.length + groups.place.length;
+  const active = groups.needs.length + groups.today.length + groups.upcoming.length + groups.place.length;
   const sections = [
+    { key: "needs", title: "Needs a time or place", data: groups.needs },
     { key: "today", title: "Today", data: groups.today },
     { key: "upcoming", title: "Upcoming", data: groups.upcoming },
     { key: "place", title: "At a place", data: groups.place },

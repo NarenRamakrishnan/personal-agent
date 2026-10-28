@@ -49,20 +49,23 @@ export function triggerText(reminder: Reminder, now = new Date()): string {
 export const isOverdue = (reminder: Reminder, now = new Date()) =>
   !reminder.completed && !!reminder.deadline && new Date(reminder.deadline).getTime() < now.getTime();
 
-export type ReminderGroups = { today: Reminder[]; upcoming: Reminder[]; place: Reminder[]; done: Reminder[] };
+export type ReminderGroups = { needs: Reminder[]; today: Reminder[]; upcoming: Reminder[]; place: Reminder[]; done: Reminder[] };
 
 // Today = overdue or due before midnight. A place-only reminder lives under "At a place".
+// One with neither can never go off, so it gets its own group at the top to be fixed.
 export function groupReminders(reminders: Reminder[], now = new Date()): ReminderGroups {
   const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
-  const groups: ReminderGroups = { today: [], upcoming: [], place: [], done: [] };
+  const groups: ReminderGroups = { needs: [], today: [], upcoming: [], place: [], done: [] };
   for (const reminder of reminders) {
     if (reminder.completed) groups.done.push(reminder);
+    else if (!reminder.deadline && !reminder.location) groups.needs.push(reminder);
     else if (!reminder.deadline) groups.place.push(reminder);
     else if (new Date(reminder.deadline).getTime() <= endOfDay.getTime()) groups.today.push(reminder);
     else groups.upcoming.push(reminder);
   }
   const byDeadline = (a: Reminder, b: Reminder) => Date.parse(a.deadline ?? "") - Date.parse(b.deadline ?? "");
   groups.today.sort(byDeadline); groups.upcoming.sort(byDeadline);
+  groups.needs.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   groups.place.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   groups.done.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return groups;

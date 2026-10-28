@@ -18,6 +18,22 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
+// What the server said, in words a person can act on. FastAPI's own validation errors
+// arrive as a list ({loc, msg}), which used to show as "Request failed (422)."
+export function readableDetail(data: unknown, status: number): string {
+  const detail = (data as { detail?: unknown })?.detail;
+  if (typeof detail === "string") return detail;
+  const first = Array.isArray(detail) ? detail[0] as { msg?: unknown; ctx?: { max_length?: number } } : undefined;
+  const msg = typeof first?.msg === "string" ? first.msg.replace(/^Value error,\s*/i, "") : "";
+  if (/email/i.test(msg)) return "That email address doesn't look right. Check it and try again.";
+  if (/at most/i.test(msg)) return first?.ctx?.max_length ? `That's too long. Keep it under ${first.ctx.max_length} characters.` : "That's too long. Try something shorter.";
+  if (/at least|empty|missing|required/i.test(msg)) return "Something needed is empty. Fill it in and try again.";
+  if (msg) return `${msg.charAt(0).toUpperCase()}${msg.slice(1)}${/[.!?]$/.test(msg) ? "" : "."}`;
+  if (status === 429) return "Heedly is busy right now. Wait a moment and try again.";
+  if (status >= 500) return "Heedly had a problem on its side. Try again in a moment.";
+  return `Request failed (${status}).`;
+}
+
 export async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
   // The shared key is an explicitly configured legacy/demo opt-in, not the default.
   const auth: Record<string, string> = process.env.EXPO_PUBLIC_API_KEY ? { "X-API-Key": process.env.EXPO_PUBLIC_API_KEY } : { Authorization: `Bearer ${await deviceAuth.getToken()}` };
@@ -32,7 +48,7 @@ export async function request<T>(path: string, method = "GET", body?: unknown): 
     if (!response.ok) {
       if (response.status === 401) throw new ApiError("Device access was rejected. Your saved identity was kept; check the backend or contact its operator. A new identity would not restore your reminders.", 401);
       const data = await response.json().catch(() => ({}));
-      throw new ApiError(typeof data.detail === "string" ? data.detail : `Request failed (${response.status}).`, response.status);
+      throw new ApiError(readableDetail(data, response.status), response.status);
     }
     return response.status === 204 ? undefined as T : await response.json() as T;
   } catch (error) {

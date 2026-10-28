@@ -123,7 +123,7 @@ export function ConfirmReminderScreen({ navigation, route, onSave, onUpdate }: P
 
     {needsTime ? <View style={{ gap: spacing.xs }}>
       <Field label="When" value={when} onChangeText={setWhen} placeholder="Oct 30, 2026 at 9:00 AM" error={errors.when}
-        helper={parsedWhen && "date" in parsedWhen ? `${parsedWhen.date.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} · ${timezoneLabel(parsedWhen.date)}` : "Type a day and time, like \"tomorrow at 9\" or \"Oct 30 at 2pm\"."} />
+        helper={parsedWhen && "date" in parsedWhen ? `${parsedWhen.date.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} · ${timezoneLabel(parsedWhen.date)}` : "Type a day and time, like \"tomorrow at 9\", \"10/30 2pm\" or \"in 2 hours\"."} />
       <Chips>{QUICK.map(q => <Chip key={q.label} label={q.label} action accessibilityLabel={`Set time to ${q.label}`} onPress={() => setWhen(formatForField(q.build().toISOString()))} />)}</Chips>
       <Text style={type.fieldLabel}>Repeat</Text>
       <Chips>{REPEATS.map(r => <Chip key={r.label} label={r.label} selected={repeat === r.value} onPress={() => setRepeat(r.value)} accessibilityLabel={`Repeat: ${r.label}`} />)}</Chips>

@@ -131,6 +131,46 @@ describe("listening session", () => {
   });
 });
 
+describe("what happened to each phrase", () => {
+  it("tells the caller whether a phrase made something, found nothing, was kept or was refused", async () => {
+    const parse = vi.fn()
+      .mockResolvedValueOnce({ sessionId: "s1", reminders: [reminder("r1", "Call Mom")], pendingChunks: 0, changed: [] })
+      .mockResolvedValueOnce({ sessionId: "s1", reminders: [], pendingChunks: 0, changed: [] })
+      .mockResolvedValueOnce({ sessionId: "s1", reminders: [], pendingChunks: 1, changed: [] })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(Object.assign(new Error("Text is too long"), { status: 422 }));
+    const session = createListenSession(fakeApi({ parse })); await session.start();
+    // Sent back to back, the way a fast typist does: none of them may be lost.
+    const outcomes = await Promise.all(["call mom", "hello there", "a hard one", "offline one", "x".repeat(5)].map(t => session.say(t)));
+    expect(outcomes).toEqual(["saved", "nothing", "pending", "kept", "refused"]);
+    expect(parse).toHaveBeenCalledTimes(5);
+  });
+
+  it("says plainly that the connection dropped instead of showing the browser's error", async () => {
+    const session = createListenSession(fakeApi({ parse: vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")) })); await session.start();
+    await session.say("call the bank");
+    expect(session.getSnapshot().error).not.toMatch(/Failed to fetch/);
+    expect(session.getSnapshot().error).toMatch(/connection.*kept what you said/i);
+  });
+
+  it("splits a long pasted list into pieces the server can read in time", async () => {
+    const api = fakeApi(); const session = createListenSession(api); await session.start();
+    const list = Array.from({ length: 30 }, (_, i) => `Remind me to do chore number ${i} on Saturday morning.`).join("\n");
+    const blob = "word ".repeat(1500).trim(); // no punctuation at all, past the server's limit
+    expect(await session.say(list)).toBe("saved");
+    expect(await session.say(blob)).toBe("saved");
+    const sent = vi.mocked(api.parse).mock.calls.map(c => c[1]);
+    expect(sent.length).toBeGreaterThan(3);
+    for (const text of sent) expect(text.length).toBeLessThanOrEqual(4000);
+    expect(sent.join(" ")).toContain("chore number 29");
+  });
+
+  it("hands the words back when the session never started", async () => {
+    const session = createListenSession(fakeApi());
+    expect(await session.say("call mom")).toBe("not_listening");
+  });
+});
+
 describe("starting", () => {
   it("words typed while the session is still starting go into that session, not a second one", async () => {
     let open!: () => void;

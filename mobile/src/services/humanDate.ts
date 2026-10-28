@@ -1,5 +1,7 @@
 // Reads the date people type into the reminder form: "Oct 30 at 9am", "tomorrow at 9",
-// "friday 2:30 pm", "October 30, 2026 at 9:00 AM". No date-picker dependency needed.
+// "friday 2:30 pm", "October 30, 2026 at 9:00 AM", "10/30 3pm", "in 2 hours".
+// Numeric dates are month first, the same order as the "Oct 30" the form shows.
+// No date-picker dependency needed.
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -28,8 +30,15 @@ function readTime(text: string): Time | null | undefined {
 export type HumanDateResult = { date: Date } | { error: string };
 
 export function parseHumanDate(input: string, now = new Date()): HumanDateResult {
-  const text = input.trim().toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ");
+  // "9.30" is 9:30; "5 p.m." keeps its dots.
+  const text = input.trim().toLowerCase().replace(/,/g, " ").replace(/\s+/g, " ").replace(/\b(\d{1,2})\.(\d{2})(?!\d)/g, "$1:$2");
   if (!text) return { error: "Enter a date and time, like Oct 30 at 9:00 AM." };
+  const later = text.match(/^in (an?|\d+) ?(m|mins?|minutes?|h|hrs?|hours?|d|days?)$/);
+  if (later) {
+    const n = /^an?$/.test(later[1]) ? 1 : Number(later[1]);
+    const unit = later[2][0] === "m" ? 60000 : later[2][0] === "h" ? 3600000 : 86400000;
+    return { date: new Date(now.getTime() + n * unit) };
+  }
   const date = new Date(now); date.setSeconds(0, 0);
   let dayFound = false; let timeText = text;
 
@@ -39,18 +48,20 @@ export function parseHumanDate(input: string, now = new Date()): HumanDateResult
   const dayFirst = text.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+(\d{4}))?\b/);
   const monthFirstRaw = text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?![:\d]|\s*[ap]\.?m)(?:\s+(\d{4}))?\b/);
   const monthFirst = dayFirst && monthFirstRaw && (dayFirst.index ?? 0) < (monthFirstRaw.index ?? 0) ? null : monthFirstRaw;
+  const numeric = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?\b/);
 
   if (relative) {
     if (relative[1] === "tomorrow") date.setDate(date.getDate() + 1);
     dayFound = true; timeText = text.replace(relative[0], " ");
     if (relative[1] === "tonight" && readTime(timeText) === undefined) { date.setHours(20, 0); return { date }; }
-  } else if (monthFirst || dayFirst) {
-    const m = monthFirst ? MONTHS.indexOf(monthFirst[1]) : MONTHS.indexOf(dayFirst![2]);
-    const d = Number(monthFirst ? monthFirst[2] : dayFirst![1]);
-    const y = monthFirst?.[3] ?? dayFirst?.[3];
+  } else if (monthFirst || dayFirst || numeric) {
+    const m = monthFirst ? MONTHS.indexOf(monthFirst[1]) : dayFirst ? MONTHS.indexOf(dayFirst[2]) : Number(numeric![1]) - 1;
+    const d = Number(monthFirst ? monthFirst[2] : dayFirst ? dayFirst[1] : numeric![2]);
+    const rawYear = monthFirst?.[3] ?? dayFirst?.[3] ?? numeric?.[3];
+    const y = rawYear && rawYear.length === 2 ? `20${rawYear}` : rawYear;
     date.setFullYear(y ? Number(y) : now.getFullYear(), m, d);
-    if (date.getMonth() !== m || date.getDate() !== d) return { error: "That date doesn't exist. Check the day and month." };
-    dayFound = true; timeText = text.replace((monthFirst ?? dayFirst)![0], " ");
+    if (m < 0 || m > 11 || date.getMonth() !== m || date.getDate() !== d) return { error: "That date doesn't exist. Check the day and month." };
+    dayFound = true; timeText = text.replace((monthFirst ?? dayFirst ?? numeric)![0], " ");
     if (!y) { const probe = new Date(date); probe.setHours(23, 59); if (probe < now) date.setFullYear(date.getFullYear() + 1); }
   } else if (weekday) {
     const target = DAYS.indexOf(weekday[2]);
@@ -65,7 +76,7 @@ export function parseHumanDate(input: string, now = new Date()): HumanDateResult
   if (!dayFound && !time) return { error: "Enter a date and time, like Oct 30 at 9:00 AM." };
   date.setHours(time?.hour ?? 9, time?.minute ?? 0, 0, 0);
   // A bare weekday or time that already passed today means the next one.
-  if (!relative && !monthFirst && !dayFirst && date <= now) date.setDate(date.getDate() + (weekday ? 7 : 1));
+  if (!relative && !monthFirst && !dayFirst && !numeric && date <= now) date.setDate(date.getDate() + (weekday ? 7 : 1));
   return { date };
 }
 

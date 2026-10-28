@@ -354,3 +354,19 @@ def test_the_purge_is_bulk_too(client, monkeypatch):
     db.commit()
     log = statements(client, lambda: retention.purge_expired(db))
     assert len(log) <= 6 and retention.purge_expired(db)["transcripts_erased"] == 0
+
+
+# ---- an address said out loud, the way speech-to-text writes it ----------
+
+@pytest.mark.parametrize("text, address", [
+    ("email priya at gmail dot com that the meeting moved", "priya@gmail.com"),
+    ("send it to john dot smith at umass dot edu", "john.smith@umass.edu"),
+    ("Email Priya At Gmail Dot Com now", "priya@gmail.com"),
+])
+def test_an_address_spoken_with_at_and_dot_counts_as_said(text, address):
+    assert emailer._spoken_address(address, text) == address
+
+
+def test_at_and_dot_said_in_passing_do_not_make_an_address():
+    assert emailer._spoken_address("me@home.com", "remind me at home to dot the i's") is None
+    assert emailer._spoken_address("priya@gmail.co", "email priya at gmail dot com") is None

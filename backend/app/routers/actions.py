@@ -26,7 +26,7 @@ def create_email_draft(body: EmailRequest, db: Session = Depends(get_session), o
         with llm.time_limit(config.REQUEST_BUDGET_S), llm.charged_to(owner):
             draft = emailer.make_draft(body.text, body.now or utcnow(), resolve_tz(settings.timezone_for(prefs, body.timezone)))
     except emailer.NoEmailRequest:
-        raise HTTPException(status_code=422, detail="That doesn't look like a request to send an email")
+        raise HTTPException(status_code=422, detail="Heedly couldn't tell what email to write. Say who it's for and what to say, like \"email Priya that I'm running late\".")
     except llm.LLMError:
         raise HTTPException(status_code=503, detail="Drafting is temporarily unavailable")
     # "Email Mom": the address the person taught Heedly for Mom, never one the model made up.

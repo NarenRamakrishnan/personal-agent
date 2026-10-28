@@ -86,18 +86,82 @@ test("an email said during a session lands on the review list unsent", async ({ 
   await expect(page.getByText("Email drafts needing approval", { exact: true })).toBeVisible();
   await expect(page.getByText("Heedly never sends email for you.", { exact: true })).toBeVisible();
 });
-test("a failed phrase keeps the text and a retry adds it once", async ({ page }) => {
+test("a phrase that fails to send is kept and added once at review", async ({ page }) => {
   await page.getByRole("button", { name: "Type instead", exact: true }).click();
   await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow to call Dad");
   await page.route(`${api}/sessions/parse`, route => route.fulfill({ status: 503, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ detail: "Temporary browser test failure" }) }));
   await page.getByRole("button", { name: "Add to session", exact: true }).click();
-  await expect(page.getByText("We couldn't process those words. Try again or edit the text.", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("Remind me tomorrow to call Dad");
+  await expect(page.getByText(/kept what you said and will try again when you review/)).toBeVisible();
   await page.unroute(`${api}/sessions/parse`);
-  await page.getByRole("button", { name: "Add to session", exact: true }).click();
-  await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
   await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
   await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+  // It reached Heedly at Stop, so the review mustn't also say it didn't.
+  await expect(page.getByText("These didn't reach Heedly", { exact: true })).toHaveCount(0);
+});
+test("a dropped connection is explained in plain words", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.route(`${api}/sessions/parse`, route => route.abort("internetdisconnected"));
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow to call the bank");
+  await page.getByLabel("Your words", { exact: true }).press("Enter");
+  await expect(page.getByText(/can't be reached\. Check your connection\. Heedly kept what you said/)).toBeVisible();
+  await expect(page.getByText(/Failed to fetch/)).toHaveCount(0);
+});
+test("words Heedly refuses come back to the box to fix", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.route(`${api}/sessions/parse`, route => route.fulfill({ status: 422, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify({ detail: "Text is too long" }) }));
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow to call Dad");
+  await page.getByLabel("Your words", { exact: true }).press("Enter");
+  await expect(page.getByText("Heedly couldn't use those words. Edit them and add again.", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("Remind me tomorrow to call Dad");
+});
+test("typing several things back to back without waiting keeps every one", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  const box = page.getByLabel("Your words", { exact: true });
+  for (const phrase of ["Remind me tomorrow to call Dad", "Remind me tomorrow to pay rent", "Remind me tomorrow to buy stamps"]) {
+    await box.fill(phrase); await box.press("Enter");
+    await expect(box).toHaveValue(""); // cleared at once, ready for the next one
+  }
+  await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(3);
+});
+test("words typed but never added still make it to the review", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow to return the library books");
+  await page.getByRole("button", { name: "Stop listening and review caught items", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+});
+test("going back with words in the box keeps them too", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow to renew my passport");
+  await page.getByRole("button", { name: "Go back", exact: true }).click();
+  await expect(page.getByText("Review your session", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+});
+test("forgetting this browser asks first and offers to erase the data", async ({ page }) => {
+  await create(page, "Remind me tomorrow to buy milk", "Keep me");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Privacy & data", exact: true }).click();
+  await page.getByRole("button", { name: "Forget this browser", exact: true }).click();
+  await expect(page.getByText("Forget this browser?", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Keep using it", exact: true }).click();
+  await home(page);
+  await expect(page.getByRole("button", { name: "Open reminder: Keep me", exact: true })).toBeVisible();
+  const before = await page.evaluate(() => Object.entries(localStorage).find(([key]) => key.startsWith("device."))![1]);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Privacy & data", exact: true }).click();
+  await page.getByRole("button", { name: "Forget this browser", exact: true }).click();
+  await page.getByRole("button", { name: "Erase my data, then forget", exact: true }).click();
+  await expect(page.getByText("One less thing on your mind.", { exact: true })).toBeVisible();
+  // The old key's reminders are gone from the backend, not just hidden.
+  const left = await page.evaluate(async ({ api, before }) => (await (await fetch(`${api}/reminders`, { headers: { Authorization: `Bearer ${before}` } })).json()).length, { api, before });
+  expect(left).toBe(0);
+});
+test("a reminder with no time or place sits at the top of the list, not under places", async ({ page }) => {
+  await saveDirect(page, { id: "needs-detail", title: "Sort the mail", triggerType: "time", completed: false, createdAt: new Date().toISOString() });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Open reminder: Sort the mail", exact: true })).toBeVisible();
+  await expect(page.getByText("At a place", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Needs a time or place", { exact: true }).first()).toBeVisible();
 });
 test("a reminder with no time or place is flagged with a way to fix it", async ({ page }) => {
   // The isolated backend's mock parser always adds a time, so hand Review a reminder
@@ -155,7 +219,7 @@ test("typing something Heedly already has explains why nothing new appeared", as
     await page.getByRole("button", { name: "Add to session", exact: true }).click();
     await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
   }
-  await expect(page.getByText(/^Nothing new in "Remind me tomorrow at 7am to feed the fish"/)).toBeVisible();
+  await expect(page.getByText(/^Heedly didn't find anything new to remember in "Remind me tomorrow at 7am to feed the fish"/)).toBeVisible();
 });
 
 // A reminder saved straight to the API, for states the UI won't create (like one already due).

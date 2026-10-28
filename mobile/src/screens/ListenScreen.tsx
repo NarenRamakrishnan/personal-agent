@@ -41,7 +41,11 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const [typed, setTyped] = useState("");
   const [typedError, setTypedError] = useState("");
   const [typedNote, setTypedNote] = useState("");
-  const [adding, setAdding] = useState(false);
+  // Typed lines still being read. Enter clears the box at once, so the next thing can be
+  // typed straight away; nothing typed meanwhile is ever wiped.
+  const [reading, setReading] = useState<string[]>([]);
+  const typedRef = useRef("");
+  useEffect(() => { typedRef.current = typed; }, [typed]);
   const [finishing, setFinishing] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const leaving = useRef(false);
@@ -71,13 +75,17 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
     if (finishing) return;
     setFinishing(true);
     try {
+      // Words typed but never added still count: nobody expects Review to throw them away.
+      const leftover = typedRef.current.trim();
+      if (leftover) { setTyped(""); void session.say(leftover); }
       await speech.stop();
       await session.sayAll(talkRef.current);
       talkRef.current = [];
       const detail = await session.stop();
       await onSessionEnded().catch(() => {});
       leaving.current = true;
-      if (detail) navigation.replace("Review", { detail, unsent: state.unsent });
+      // Read after Stop: its last retry may have sent some of them.
+      if (detail) navigation.replace("Review", { detail, unsent: session.getSnapshot().unsent });
       else navigation.goBack();
     } catch { setFinishing(false); }
   };
@@ -91,18 +99,18 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const addTyped = async () => {
     const text = typed.trim();
     if (!text) { setTypedError("Type something you'd like Heedly to remember."); return; }
-    setTypedError(""); setTypedNote(""); setAdding(true);
-    const before = session.getSnapshot().heard;
-    const caught = session.getSnapshot().feed;
-    await session.say(text);
-    setAdding(false);
-    if (session.getSnapshot().heard > before) {
-      setTyped("");
-      // Heedly read it but found nothing new, often because that reminder already exists.
-      const after = session.getSnapshot().feed;
-      if (after.length === caught.length && after.every((item, i) => item === caught[i])) setTypedNote(`Nothing new in "${text.length > 60 ? `${text.slice(0, 57)}…` : text}". You may already have that reminder, or try adding a time or place.`);
+    setTypedError(""); setTypedNote(""); setTyped("");
+    setReading(lines => [...lines, text]);
+    const outcome = await session.say(text);
+    setReading(lines => { const i = lines.indexOf(text); return i < 0 ? lines : lines.filter((_, j) => j !== i); });
+    const quoted = `"${text.length > 60 ? `${text.slice(0, 57)}…` : text}"`;
+    if (outcome === "nothing") setTypedNote(`Heedly didn't find anything new to remember in ${quoted}. If it's a task, say what and when, like "call the dentist tomorrow at 9". It may also be a reminder you already have.`);
+    // Refused or no session: hand the words back to fix, unless something new was typed since.
+    else if (outcome === "refused" || outcome === "not_listening") {
+      setTyped(current => current.trim() ? current : text);
+      setTypedError(outcome === "refused" ? "Heedly couldn't use those words. Edit them and add again." : "Heedly isn't ready yet. Your words are back in the box; add them again in a moment.");
     }
-    else setTypedError("We couldn't process those words. Try again or edit the text.");
+    // "kept" is explained by the session's own notice; "pending" by the still-working notice.
   };
 
   const listening = speech.status === "on";
@@ -111,8 +119,8 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
 
   const typedPanel = <Card>
     <Field label="Your words" value={typed} onChangeText={setTyped} multiline autoFocus={typingOnly} placeholder="Call the dentist tomorrow at 9, and buy milk near a grocery store" error={typedError}
-      onEnter={() => { if (!adding) void addTyped(); }} helper={Platform.OS === "web" ? "Press Enter to add. Shift+Enter starts a new line." : undefined} />
-    <Button title={adding ? "Adding…" : "Add to session"} variant="secondary" busy={adding} onPress={() => { void addTyped(); }} />
+      onEnter={() => { void addTyped(); }} helper={Platform.OS === "web" ? "Press Enter to add. Shift+Enter starts a new line." : undefined} />
+    <Button title="Add to session" variant="secondary" onPress={() => { void addTyped(); }} />
     {typedNote ? <Text accessibilityRole="alert" style={type.meta}>{typedNote}</Text> : null}
   </Card>;
 
@@ -172,8 +180,11 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
 
     {state.feed.length || typingOnly ? <View style={{ gap: spacing.sm }}>
       <SectionHeader title="Caught so far" count={state.feed.length} />
-      {state.sending ? <Text style={type.meta}>Working on what you said…</Text> : null}
-      {state.feed.length === 0 ? <Text style={type.meta}>Add what you'd like to remember. You can put several things in one go.</Text> : null}
+      {reading.map((line, i) => <View key={`${i}-${line}`} style={styles.reading} accessibilityLabel={`Reading: ${line}`}>
+        <Text style={[type.meta, { flex: 1 }]} numberOfLines={2}>Reading "{line}"</Text><ThinkingDots color={colors.brandGreen} />
+      </View>)}
+      {state.sending && !reading.length ? <Text style={type.meta}>Working on what you said…</Text> : null}
+      {state.feed.length === 0 && !reading.length ? <Text style={type.meta}>Add what you'd like to remember. You can put several things in one go.</Text> : null}
       {state.feed.map(item => <FadeIn key={item.key}><FeedCard item={item} /></FadeIn>)}
     </View> : null}
 
@@ -185,6 +196,7 @@ const styles = themedStyles(() => ({
   mic: { backgroundColor: colors.micSurface, borderRadius: radii.panel, padding: spacing.md, gap: spacing.xs },
   micRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   micLeft: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  reading: { flexDirection: "row", alignItems: "center", gap: spacing.xs, borderWidth: 1, borderStyle: "dashed", borderColor: colors.border, borderRadius: radii.card, padding: spacing.sm },
   thinking: { backgroundColor: colors.successSurface, borderRadius: radii.panel, padding: spacing.md, gap: spacing.xs },
   transcript: { minHeight: 72, backgroundColor: colors.surface, borderRadius: radii.field, borderWidth: 1, borderColor: colors.border, padding: spacing.md, justifyContent: "center" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
