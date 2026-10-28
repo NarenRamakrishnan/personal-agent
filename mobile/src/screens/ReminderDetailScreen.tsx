@@ -1,11 +1,11 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Badge, Button, Card, Chip, Chips, Notice, Page } from "../components/Controls";
 import { RootStackParamList } from "../navigation/types";
 import { isOverdue, triggerText, whenText, whereText } from "../services/format";
 import { timezoneLabel } from "../services/humanDate";
-import { colors, spacing, type } from "../theme";
+import { colors, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ReminderDetail"> & {
@@ -74,7 +74,7 @@ export function ReminderDetailScreen({ navigation, route, reminders, onComplete,
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   row: { gap: spacing.xxs },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-});
+}));

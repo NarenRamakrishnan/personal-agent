@@ -9,7 +9,7 @@ vi.mock("expo-speech-recognition", async () => {
     React.useEffect(() => { const handlers = state.events.get(name) ?? new Set(); handlers.add(callback); state.events.set(name, handlers); return () => { handlers.delete(callback); }; }, [name, callback]);
   } };
 });
-vi.mock("react-native", () => ({ View: "view", Text: "text", Vibration: { vibrate: vi.fn() }, AppState: { addEventListener: (_: string, callback: (state: string) => void) => { state.background = callback; return { remove: vi.fn() }; } }, Animated: { Value: class { setValue() {} }, Text: "text", loop: () => ({ start() {}, stop() {} }), sequence: vi.fn(), timing: vi.fn() } }));
+vi.mock("react-native", () => ({ View: "view", Text: "text", Platform: { OS: "ios", select: (options: any) => options.ios ?? options.default }, StyleSheet: { create: (styles: any) => styles }, Vibration: { vibrate: vi.fn() }, AppState: { addEventListener: (_: string, callback: (state: string) => void) => { state.background = callback; return { remove: vi.fn() }; } }, Animated: { Value: class { setValue() {} }, Text: "text", View: "view", loop: () => ({ start() {}, stop() {} }), sequence: vi.fn(), timing: vi.fn() } }));
 vi.mock("../src/components/Controls", () => ({ Button: (props: any) => React.createElement("button", props), errorMessage: (error: Error) => error.message }));
 vi.mock("../src/services/activationTone", () => ({ activationTone: vi.fn(async () => {}) }));
 import { VoiceInput } from "../src/components/VoiceInput";

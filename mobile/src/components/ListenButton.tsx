@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
-import { AccessibilityInfo, ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, shadow, type } from "../theme";
+import { AccessibilityInfo, ActivityIndicator, Animated, Pressable, Text, View } from "react-native";
+import { colors, shadow, type, themedStyles } from "../theme";
 
 // A microphone drawn with plain views so no icon library is needed.
-export function MicGlyph({ color = colors.cream, size = 32 }: { color?: string; size?: number }) {
+export function MicGlyph({ color = colors.onSolid, size = 32 }: { color?: string; size?: number }) {
   const s = size / 32;
   return <View style={{ width: size, height: size, alignItems: "center" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     <View style={{ width: 12 * s, height: 19 * s, borderRadius: 6 * s, backgroundColor: color }} />
@@ -35,15 +35,15 @@ export function ListenButton({ onPress, active = false, starting = false, label 
         opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.24, 0] }), transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] }) }] }]} /> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ busy: starting }} onPress={onPress} disabled={starting}
         style={({ pressed }) => [styles.circle, shadow.raised, { width: circle, height: circle, borderRadius: circle / 2, backgroundColor: active ? colors.micActive : pressed ? colors.brandPressed : colors.brandGreen, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-        {starting ? <ActivityIndicator color={colors.cream} size="large" /> : active ? <View style={styles.stop} /> : <MicGlyph />}
+        {starting ? <ActivityIndicator color={colors.onSolid} size="large" /> : active ? <View style={styles.stop} /> : <MicGlyph />}
       </Pressable>
     </View>
     <Text style={type.listenLabel}>{starting ? "Starting…" : label}</Text>
   </View>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   circle: { alignItems: "center", justifyContent: "center" },
   ring: { position: "absolute", backgroundColor: colors.micActive },
-  stop: { width: 28, height: 28, borderRadius: 6, backgroundColor: colors.cream },
-});
+  stop: { width: 28, height: 28, borderRadius: 6, backgroundColor: colors.onSolid },
+}));

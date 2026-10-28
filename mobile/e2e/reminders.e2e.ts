@@ -115,3 +115,33 @@ test("native-only notifications fail clearly in a browser", async ({ page }) => 
   await page.getByRole("button", { name: "Enable reminder notifications", exact: true }).click();
   await expect(page.getByText("Native notifications require", { exact: false })).toBeVisible();
 });
+test("dark mode follows the device, can be pinned from Settings and is remembered", async ({ page }) => {
+  const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.emulateMedia({ colorScheme: "dark" }); await page.reload();
+  await expect(page.getByText("A little less to remember.", { exact: true })).toBeVisible();
+  await expect.poll(background).toBe("rgb(17, 27, 21)");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("radio", { name: "Appearance: Light", exact: true }).click();
+  await expect.poll(background).toBe("rgb(250, 248, 242)");
+  // Switching keeps the person on Settings, and the drawn back button takes them home.
+  await expect(page.getByText("Appearance", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect.poll(background).toBe("rgb(250, 248, 242)");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("radio", { name: "Appearance: Light", exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "Go back", exact: true }).click();
+  await expect(page.getByText("A little less to remember.", { exact: true })).toBeVisible();
+});
+test("review opens with a count of what was caught", async ({ page }) => {
+  await typeSession(page, ["Remind me tomorrow at 9am to call the dentist"]);
+  await expect(page.getByLabel(/^Caught: 1 new/)).toBeVisible();
+});
+test("typing something Heedly already has explains why nothing new appeared", async ({ page }) => {
+  await page.getByRole("button", { name: "Type instead", exact: true }).click();
+  for (let i = 0; i < 2; i++) {
+    await page.getByLabel("Your words", { exact: true }).fill("Remind me tomorrow at 7am to feed the fish");
+    await page.getByRole("button", { name: "Add to session", exact: true }).click();
+    await expect(page.getByLabel("Your words", { exact: true })).toHaveValue("");
+  }
+  await expect(page.getByText(/^Nothing new in "Remind me tomorrow at 7am to feed the fish"/)).toBeVisible();
+});

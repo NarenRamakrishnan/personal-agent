@@ -1,14 +1,14 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useMemo, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { actionsApi } from "../api/actions";
 import { sessionApi } from "../api/sessions";
-import { AsyncButton, Badge, Button, Card, Notice, Page, ScreenTitle, SectionHeader } from "../components/Controls";
+import { AsyncButton, Badge, Button, Card, FadeIn, Notice, Page, ScreenTitle, SectionHeader } from "../components/Controls";
 import { RootStackParamList } from "../navigation/types";
 import { contextApi } from "../api/client";
 import { missingInfo, triggerText } from "../services/format";
-import { colors, spacing, type } from "../theme";
+import { colors, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Review"> & {
@@ -74,6 +74,16 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
     navigation.navigate("Home", { notice: total ? "Session saved." : undefined });
   };
 
+  // Cards arrive one after another, capped so a long list doesn't make anyone wait.
+  let shown = 0;
+  const arrive = (card: React.ReactElement) => <FadeIn key={card.key} delay={Math.min(shown++, 5) * 50}>{card}</FadeIn>;
+  const summary = [
+    newItems.length ? `${newItems.length} new` : "",
+    updated.length ? `${updated.length} updated` : "",
+    completed.length ? `${completed.length} done` : "",
+    drafts.length ? `${drafts.length} email ${drafts.length === 1 ? "draft" : "drafts"}` : "",
+  ].filter(Boolean);
+
   const reminderCard = (r: Reminder, kind: "new" | "updated" | "completed") => {
     const state = pending[r.id];
     const miss = state || kind === "completed" ? undefined : missingInfo(r, savedNames);
@@ -106,7 +116,10 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
   </>;
 
   return <Page footer={footer}>
-    <ScreenTitle subtitle={total ? "Here's what I caught. Everything is already saved, so fix anything I got wrong." : undefined}>Review your session</ScreenTitle>
+    <ScreenTitle subtitle={total ? "Here's what I caught. It's already saved, so just fix anything I got wrong." : undefined}>Review your session</ScreenTitle>
+    {summary.length ? <FadeIn><View style={styles.summary} accessibilityLabel={`Caught: ${summary.join(", ")}`}>
+      {summary.map(part => <Text key={part} style={styles.summaryPart}>{part}</Text>)}
+    </View></FadeIn> : null}
     <Text style={type.meta}>Microphone off</Text>
     {needsDetail ? <Notice tone="attention" title={needsDetail === 1 ? "One reminder needs more detail" : `${needsDetail} reminders need more detail`}>
       <Text style={[type.meta, { color: colors.accent }]}>Heedly can only remind you with a time or a place. They're marked below.</Text>
@@ -132,14 +145,14 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
       <Button title="Start listening" variant="secondary" onPress={() => navigation.replace("Listen")} />
     </View> : null}
 
-    {newItems.length ? <View style={styles.section}><SectionHeader title="New" count={newItems.length} />{newItems.map(r => reminderCard(r, "new"))}</View> : null}
-    {updated.length ? <View style={styles.section}><SectionHeader title="Updated" count={updated.length} />{updated.map(r => reminderCard(r, "updated"))}</View> : null}
-    {completed.length ? <View style={styles.section}><SectionHeader title="Completed" count={completed.length} />{completed.map(r => reminderCard(r, "completed"))}</View> : null}
+    {newItems.length ? <View style={styles.section}><SectionHeader title="New" count={newItems.length} />{newItems.map(r => arrive(reminderCard(r, "new")))}</View> : null}
+    {updated.length ? <View style={styles.section}><SectionHeader title="Updated" count={updated.length} />{updated.map(r => arrive(reminderCard(r, "updated")))}</View> : null}
+    {completed.length ? <View style={styles.section}><SectionHeader title="Completed" count={completed.length} />{completed.map(r => arrive(reminderCard(r, "completed")))}</View> : null}
     {drafts.length ? <View style={styles.section}>
       <SectionHeader title="Email drafts needing approval" count={drafts.length} />
       {drafts.map(a => {
         const state = pending[a.id];
-        return <Card key={a.id} style={state ? { backgroundColor: colors.surfaceSubtle } : undefined}>
+        return arrive(<Card key={a.id} style={state ? { backgroundColor: colors.surfaceSubtle } : undefined}>
           <View style={styles.rowBetween}><Badge label="Needs approval" tone="email" />{saved[a.id] ? <Badge label="Deleted" tone="neutral" /> : null}</View>
           <Text style={type.cardTitle}>{a.email.subject || "Email draft"}</Text>
           <Text style={type.meta}>{a.email.to || a.email.toName ? `To ${a.email.to || a.email.toName}` : "Recipient needed"}</Text>
@@ -152,17 +165,19 @@ export function ReviewScreen({ navigation, route, reminders, onDelete, onUpdate,
                 <Button title="Delete draft" variant="dangerGhost" compact onPress={() => mark(a.id, "discard", "The email draft will be deleted.")} />
               </View>
             </>}
-        </Card>;
+        </Card>);
       })}
     </View> : null}
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   section: { gap: spacing.sm, marginTop: spacing.xs },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   badges: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, flexShrink: 1 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.xxs },
   left: { alignSelf: "flex-start", paddingHorizontal: 0 },
+  summary: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  summaryPart: { ...type.fieldLabel, color: colors.brandGreen, backgroundColor: colors.successSurface, borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs, overflow: "hidden" },
   empty: { gap: spacing.sm, alignItems: "stretch", paddingVertical: spacing.xl },
-});
+}));

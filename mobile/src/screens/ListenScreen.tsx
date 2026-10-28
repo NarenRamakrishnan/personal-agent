@@ -1,13 +1,13 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AccessibilityInfo, Linking, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Linking, Text, View } from "react-native";
 import { sessionApi } from "../api/sessions";
-import { Badge, Button, Card, Field, Notice, Page, SectionHeader } from "../components/Controls";
+import { Badge, Button, Card, FadeIn, Field, Notice, Page, PulseDot, SectionHeader, ThinkingDots } from "../components/Controls";
 import { useContinuousSpeech } from "../components/useContinuousSpeech";
 import { RootStackParamList } from "../navigation/types";
 import { triggerText } from "../services/format";
 import { createListenSession, FeedItem } from "../services/listenSession";
-import { colors, radii, spacing, type } from "../theme";
+import { colors, radii, spacing, type, themedStyles } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Listen"> & { onSessionEnded: () => Promise<void> };
 
@@ -40,6 +40,7 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const [showTyping, setShowTyping] = useState(typingOnly);
   const [typed, setTyped] = useState("");
   const [typedError, setTypedError] = useState("");
+  const [typedNote, setTypedNote] = useState("");
   const [adding, setAdding] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -90,11 +91,17 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const addTyped = async () => {
     const text = typed.trim();
     if (!text) { setTypedError("Type something you'd like Heedly to remember."); return; }
-    setTypedError(""); setAdding(true);
+    setTypedError(""); setTypedNote(""); setAdding(true);
     const before = session.getSnapshot().heard;
+    const caught = session.getSnapshot().feed;
     await session.say(text);
     setAdding(false);
-    if (session.getSnapshot().heard > before) { setTyped(""); }
+    if (session.getSnapshot().heard > before) {
+      setTyped("");
+      // Heedly read it but found nothing new, often because that reminder already exists.
+      const after = session.getSnapshot().feed;
+      if (after.length === caught.length && after.every((item, i) => item === caught[i])) setTypedNote(`Nothing new in "${text.length > 60 ? `${text.slice(0, 57)}…` : text}". You may already have that reminder, or try adding a time or place.`);
+    }
     else setTypedError("We couldn't process those words. Try again or edit the text.");
   };
 
@@ -105,6 +112,7 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
   const typedPanel = <Card>
     <Field label="Your words" value={typed} onChangeText={setTyped} multiline placeholder="Call the dentist tomorrow at 9, and buy milk near a grocery store" error={typedError} />
     <Button title={adding ? "Adding…" : "Add to session"} variant="secondary" busy={adding} onPress={() => { void addTyped(); }} />
+    {typedNote ? <Text accessibilityRole="alert" style={type.meta}>{typedNote}</Text> : null}
   </Card>;
 
   const footer = <>
@@ -121,9 +129,13 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
       <Button title="Try again" variant="secondary" compact onPress={() => { void session.start().then(() => { if (!typingOnly) void speech.start(); }, () => {}); }} />
     </Notice> : null}
 
-    {listening || micBusy ? <View style={styles.mic} accessibilityLiveRegion="polite">
+    {finishing ? <FadeIn><View style={styles.thinking} accessibilityLiveRegion="polite">
+      <Text style={type.meta}>Microphone off</Text>
+      <View style={styles.micLeft}><Text style={[type.cardTitle, { color: colors.brandGreen }]}>Finding your reminders</Text><ThinkingDots color={colors.brandGreen} /></View>
+      <Text style={type.meta}>Nemotron is reading everything you said as a whole, corrections included.</Text>
+    </View></FadeIn> : listening || micBusy ? <View style={styles.mic} accessibilityLiveRegion="polite">
       <View style={styles.micRow}>
-        <View style={styles.micLeft}>{listening ? <View style={styles.dot} /> : null}<Text style={[type.cardTitle, { color: colors.micActive }]}>{listening ? "Microphone active" : speech.status === "starting" ? "Starting microphone…" : "Finishing your session…"}</Text></View>
+        <View style={styles.micLeft}>{listening ? <PulseDot color={colors.micActive} /> : null}<Text style={[type.cardTitle, { color: colors.micActive }]}>{listening ? "Microphone active" : speech.status === "starting" ? "Starting microphone…" : "Finishing your session…"}</Text></View>
         {listening ? <Text style={[type.timer, { color: colors.micActive }]}>{clock(seconds)}</Text> : null}
       </View>
       <Text style={[type.meta, { color: colors.textPrimary }]}>Talk as long as you like. You can add, change or finish reminders, and correct yourself as you go.</Text>
@@ -137,18 +149,18 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
       </View>
     </Notice> : null}
 
-    {!listening && !micBusy && !speech.error && !typingOnly && state.status === "listening" ? <Notice title="Listening paused.">
+    {!finishing && !listening && !micBusy && !speech.error && !typingOnly && state.status === "listening" ? <Notice title="Listening paused.">
       <Text style={type.meta}>The microphone is off. Everything you said so far is kept.</Text>
       <Button title="Resume listening" variant="secondary" compact onPress={() => { void speech.start(); }} />
     </Notice> : null}
 
-    {typingOnly && !listening && !micBusy ? <Button title="Use the microphone instead" variant="ghost" onPress={() => { void speech.start(); }} /> : null}
+    {typingOnly && !listening && !micBusy && !finishing ? <Button title="Use the microphone instead" variant="ghost" onPress={() => { void speech.start(); }} /> : null}
 
-    {typingOnly && !listening && !micBusy ? typedPanel : <View style={{ gap: spacing.xs }}>
+    {typingOnly && !listening && !micBusy ? (finishing ? null : typedPanel) : <View style={{ gap: spacing.xs }}>
       <Text style={type.fieldLabel}>What you've said</Text>
       <View style={styles.transcript} accessibilityLabel="Transcript so far">
         {talk.length || speech.heard ? <>
-          {talk.map((line, i) => <Text key={i} style={type.body}>{line}</Text>)}
+          {talk.map((line, i) => <FadeIn key={i}><Text style={type.body}>{line}</Text></FadeIn>)}
           {speech.heard ? <Text style={[type.body, { color: colors.textSecondary }]}>{speech.heard}</Text> : null}
         </> : <Text style={[type.body, { color: colors.textSecondary }]}>Your words will appear here. Try "Call the dentist tomorrow at 9 and buy milk on the way home."</Text>}
       </View>
@@ -161,18 +173,18 @@ export function ListenScreen({ navigation, route, onSessionEnded }: Props) {
       <SectionHeader title="Caught so far" count={state.feed.length} />
       {state.sending ? <Text style={type.meta}>Working on what you said…</Text> : null}
       {state.feed.length === 0 ? <Text style={type.meta}>Add what you'd like to remember. You can put several things in one go.</Text> : null}
-      {state.feed.map(item => <FeedCard key={item.key} item={item} />)}
+      {state.feed.map(item => <FadeIn key={item.key}><FeedCard item={item} /></FadeIn>)}
     </View> : null}
 
-    {typingOnly && !listening && !micBusy ? null : showTyping ? typedPanel : <Button title="Type what you would say" variant="ghost" onPress={() => setShowTyping(true)} />}
+    {typingOnly && !listening && !micBusy || finishing ? null : showTyping ? typedPanel : <Button title="Type what you would say" variant="ghost" onPress={() => setShowTyping(true)} />}
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   mic: { backgroundColor: colors.micSurface, borderRadius: radii.panel, padding: spacing.md, gap: spacing.xs },
   micRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   micLeft: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.micActive },
+  thinking: { backgroundColor: colors.successSurface, borderRadius: radii.panel, padding: spacing.md, gap: spacing.xs },
   transcript: { minHeight: 72, backgroundColor: colors.surface, borderRadius: radii.field, borderWidth: 1, borderColor: colors.border, padding: spacing.md, justifyContent: "center" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
-});
+}));

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Text, Vibration, View } from "react-native";
 import { Button, errorMessage } from "./Controls";
 import { activationTone } from "../services/activationTone";
+import { colors, type } from "../theme";
 import { useIsFocused } from "@react-navigation/native";
 
 export function VoiceInput({ onTranscript, disabled = false }: { onTranscript: (text: string) => void; disabled?: boolean }) {
@@ -60,10 +61,10 @@ export function VoiceInput({ onTranscript, disabled = false }: { onTranscript: (
     } catch (e) { if (token === generation.current) { owned.current = false; setError(errorMessage(e)); setStatus("idle"); } }
   };
   return <View style={{ gap: 12 }}>
-    <Text>Tap to speak. Your speech service may use a network connection; audio is not sent to this app's backend.</Text>
+    <Text style={type.meta}>Tap to speak. Your speech service may use a network connection; audio is not sent to this app's backend.</Text>
     <Button title={status === "listening" ? `Stop microphone · ${seconds}s` : status === "idle" ? "Speak a command" : "Please wait…"} disabled={disabled || status === "starting" || status === "stopping"} onPress={status === "listening" ? () => { setStatus("stopping"); Speech.stop(); } : start} />
-    {status === "listening" && <Animated.Text accessibilityRole="alert" style={{ opacity: pulse, color: "#B54747" }}>● Microphone active</Animated.Text>}
-    {status !== "idle" && <Button title="Discard recording" onPress={() => { abortOwned(); onTranscript(""); setStatus("idle"); }} />}
-    {error ? <Text accessibilityRole="alert" style={{ color: "#B54747" }}>{error}</Text> : null}
+    {status === "listening" && <View accessibilityRole="alert" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Animated.View style={{ opacity: pulse, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.micActive }} /><Text style={[type.cardTitle, { color: colors.micActive }]}>Microphone active</Text></View>}
+    {status !== "idle" && <Button title="Discard recording" variant="secondary" onPress={() => { abortOwned(); onTranscript(""); setStatus("idle"); }} />}
+    {error ? <Text accessibilityRole="alert" style={[type.meta, { color: colors.danger }]}>{error}</Text> : null}
   </View>;
 }

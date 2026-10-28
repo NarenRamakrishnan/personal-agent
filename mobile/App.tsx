@@ -1,8 +1,8 @@
-import { DefaultTheme, NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer, NavigationState } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { AppState } from "react-native";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { AppState, Platform, Pressable, Text, useColorScheme } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { reminderApi } from "./src/api/client";
 import { errorMessage } from "./src/components/Controls";
@@ -21,10 +21,19 @@ import { PrivacyScreen } from "./src/screens/PrivacyScreen";
 import { syncBackgroundRegions } from "./src/services/background";
 import { watchForegroundContext } from "./src/services/locationLifecycle";
 import { createReminderStore } from "./src/services/reminderStore";
-import { colors } from "./src/theme";
+import { AppearanceContext, AppearancePreference, loadAppearance, resolveScheme, saveAppearance } from "./src/services/appearance";
+import { applyScheme, colors, spacing, type } from "./src/theme";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const navTheme = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.background, card: colors.background, text: colors.textPrimary, primary: colors.brandGreen, border: colors.border } };
+
+// The web build draws its own back button: the stock one is an image that the static deploy leaves out.
+function WebBack({ onPress }: { onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onPress} hitSlop={8}
+    style={({ pressed }) => ({ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: spacing.xs, borderRadius: 10, opacity: pressed ? 0.6 : 1 })}>
+    <Text style={[type.buttonLabel, { color: colors.brandGreen, fontSize: 26, lineHeight: 28, marginTop: -3 }]}>‹</Text>
+    <Text style={[type.buttonLabel, { color: colors.brandGreen }]}>Back</Text>
+  </Pressable>;
+}
 
 export default function App() {
   const [store] = useState(() => createReminderStore(reminderApi));
@@ -43,11 +52,25 @@ export default function App() {
   const deleteReminder = async (id: string) => { await store.remove(id); await cancelReminderNotification(id); };
   const snoozeReminder = (id: string, snoozedUntil: string) => update(id, { snoozedUntil });
 
+  // Light, dark or follow the device. Changing it swaps the palette and remounts the screens,
+  // keeping the navigation history so the person stays where they were.
+  const [preference, setPreferenceState] = useState<AppearancePreference>("system");
+  useEffect(() => { void loadAppearance().then(setPreferenceState); }, []);
+  const appearance = useMemo(() => ({ preference, setPreference: (next: AppearancePreference) => { setPreferenceState(next); void saveAppearance(next); } }), [preference]);
+  const scheme = resolveScheme(preference, useColorScheme());
+  applyScheme(scheme);
+  const navState = useRef<NavigationState | undefined>(undefined);
+  const navTheme = useMemo(() => {
+    const base = scheme === "dark" ? DarkTheme : DefaultTheme;
+    return { ...base, colors: { ...base.colors, background: colors.background, card: colors.background, text: colors.textPrimary, primary: colors.brandGreen, border: colors.border } };
+  }, [scheme]);
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navTheme} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
-        <StatusBar style="dark" />
-        <Stack.Navigator screenOptions={{ headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } }}>
+      <AppearanceContext.Provider value={appearance}>
+      <NavigationContainer key={scheme} theme={navTheme} initialState={navState.current} onStateChange={state => { navState.current = state; }} documentTitle={{ formatter: (options, route) => options?.title ? `${options.title} · Heedly` : route?.name === "Home" ? "Heedly" : "Heedly" }}>
+        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+        <Stack.Navigator screenOptions={({ navigation }) => ({ ...(Platform.OS === "web" ? { headerLeft: ({ canGoBack }: { canGoBack?: boolean }) => canGoBack ? <WebBack onPress={() => navigation.goBack()} /> : null } : null), headerShown: true, headerTintColor: colors.brandGreen, headerTitleStyle: { color: colors.textPrimary }, headerShadowVisible: false, headerStyle: { backgroundColor: colors.background }, headerBackTitle: "Back", contentStyle: { backgroundColor: colors.background } })}>
           <Stack.Screen name="Home" options={{ headerShown: false, title: "" }}>{(props) => <HomeScreen {...props} reminders={reminders} loaded={loaded} onRefresh={refresh} refreshing={refreshing} error={error} onToggle={r => setCompleted(r.id, !r.completed)} />}</Stack.Screen>
           <Stack.Screen name="Listen" options={{ title: "" }}>{(props) => <ListenScreen {...props} onSessionEnded={refresh} />}</Stack.Screen>
           <Stack.Screen name="Review" options={{ title: "", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }}>{(props) => <ReviewScreen {...props} reminders={reminders} onDelete={deleteReminder} onUpdate={update} onRefresh={refresh} />}</Stack.Screen>
@@ -59,6 +82,7 @@ export default function App() {
           <Stack.Screen name="ReminderDetail" options={{ title: "" }}>{(props) => <ReminderDetailScreen {...props} reminders={reminders} onComplete={setCompleted} onDelete={deleteReminder} onSnooze={snoozeReminder} />}</Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
+      </AppearanceContext.Provider>
     </SafeAreaProvider>
   );
 }

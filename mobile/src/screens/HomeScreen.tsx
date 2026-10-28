@@ -1,16 +1,16 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, SectionList, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { actionsApi } from "../api/actions";
 import { USE_MOCKS } from "../api/client";
-import { Button, Notice, SectionHeader } from "../components/Controls";
+import { Button, FadeIn, Notice, SectionHeader } from "../components/Controls";
 import { ListenButton } from "../components/ListenButton";
 import { ReminderCard } from "../components/ReminderCard";
 import { RootStackParamList } from "../navigation/types";
 import { groupReminders } from "../services/format";
-import { colors, column, radii, spacing, type } from "../theme";
+import { colors, column, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home"> & {
@@ -74,11 +74,17 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
     {error ? <View style={{ marginBottom: spacing.xl }}><Notice tone="danger" title="We couldn't refresh your reminders."><Text style={[type.meta, { color: colors.danger }]}>{error}</Text><Button title="Try again" variant="secondary" compact onPress={onRefresh} style={{ alignSelf: "flex-start" }} /></Notice></View> : null}
     {toggleError ? <View style={{ marginBottom: spacing.md }}><Notice tone="danger">{toggleError}</Notice></View> : null}
     {!loaded ? <View style={styles.loading}><ActivityIndicator color={colors.brandGreen} /><Text style={type.meta}>Loading your reminders…</Text></View> : null}
-    {loaded && active === 0 ? <View style={styles.empty}>
+    {loaded && active === 0 ? <FadeIn><View style={styles.empty}>
       <Image source={logo} style={styles.emptyLogo} accessible={false} />
-      <Text style={[type.sectionTitle, { textAlign: "center" }]}>One less thing on your mind.</Text>
-      <Text style={[type.body, { color: colors.textSecondary, textAlign: "center" }]}>Try saying, "Remind me to call the dentist tomorrow at 9."</Text>
-    </View> : null}
+      {groups.done.length ? <>
+        <Text style={[type.sectionTitle, { textAlign: "center" }]}>All caught up.</Text>
+        <Text style={[type.body, { color: colors.textSecondary, textAlign: "center" }]}>Everything you asked for is done. Tap Listen when something new comes up.</Text>
+      </> : <>
+        <Text style={[type.sectionTitle, { textAlign: "center" }]}>One less thing on your mind.</Text>
+        <Text style={[type.body, { color: colors.textSecondary, textAlign: "center" }]}>Try saying, "Call the dentist tomorrow at 9 and buy milk on the way home."</Text>
+        <Text style={[type.meta, { textAlign: "center" }]}>Heedly reminds you at the right time, or when you're near the right place.</Text>
+      </>}
+    </View></FadeIn> : null}
   </View>;
 
   return (
@@ -107,7 +113,7 @@ export function HomeScreen({ navigation, route, reminders, loaded, onRefresh, re
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   safe: { flex: 1, backgroundColor: colors.background },
   brand: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: spacing.md, paddingBottom: spacing.xl },
   brandLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
@@ -122,4 +128,4 @@ const styles = StyleSheet.create({
   emptyLogo: { width: 56, height: 56, borderRadius: 16, marginBottom: spacing.xs },
   sectionPad: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   doneRow: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-});
+}));

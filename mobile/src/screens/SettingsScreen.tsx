@@ -1,11 +1,12 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, Pressable, Text, View } from "react-native";
 import { API_BASE_URL, USE_MOCKS } from "../api/client";
-import { AsyncButton, Notice, Page, ScreenTitle } from "../components/Controls";
+import { AsyncButton, Chip, Chips, Notice, Page, ScreenTitle } from "../components/Controls";
+import { AppearancePreference, useAppearance } from "../services/appearance";
 import { RootStackParamList } from "../navigation/types";
 import { enableExactTimeAlerts, enableNotifications, notificationTimingStatus, reconcileNotifications } from "../services/notifications";
-import { colors, radii, spacing, type } from "../theme";
+import { colors, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Settings"> & { reminders: Reminder[] };
@@ -27,8 +28,16 @@ function LinkRow({ title, summary, onPress, last }: { title: string; summary: st
 
 export function SettingsScreen({ navigation, reminders }: Props) {
   const [timing, setTiming] = useState("");
+  const { preference, setPreference } = useAppearance();
+  const looks: [AppearancePreference, string][] = [["system", "Match device"], ["light", "Light"], ["dark", "Dark"]];
   return <Page>
     <ScreenTitle>Settings</ScreenTitle>
+
+    <Group title="Appearance">
+      <View style={[styles.row, styles.column]}>
+        <Chips>{looks.map(([value, label]) => <Chip key={value} label={label} selected={preference === value} onPress={() => setPreference(value)} accessibilityLabel={`Appearance: ${label}`} />)}</Chips>
+      </View>
+    </Group>
 
     <Group title="Notifications">
       <View style={[styles.row, styles.divider, styles.column]}>
@@ -68,10 +77,10 @@ export function SettingsScreen({ navigation, reminders }: Props) {
   </Page>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   panel: { backgroundColor: colors.surface, borderRadius: radii.card, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
   row: { minHeight: 64, padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
   column: { flexDirection: "column", alignItems: "stretch", gap: spacing.xs },
   divider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   chevron: { fontSize: 24, color: colors.textSecondary },
-});
+}));

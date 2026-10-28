@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { isOverdue, missingInfo, triggerText, whenText } from "../services/format";
-import { colors, radii, spacing, type } from "../theme";
+import { colors, radii, spacing, type, themedStyles } from "../theme";
 import { Reminder } from "../types/reminder";
 
 type Props = { reminder: Reminder; onPress: () => void; onToggle?: () => void; badge?: React.ReactNode };
@@ -34,12 +34,12 @@ export function ReminderCard({ reminder, onPress, onToggle, badge }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => ({
   card: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: radii.card, borderWidth: 1, borderColor: colors.border, minHeight: 88, marginBottom: spacing.sm, overflow: "hidden" },
   target: { width: 56, alignSelf: "stretch", alignItems: "center", justifyContent: "center", paddingLeft: spacing.xs },
   circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.controlBorder, alignItems: "center", justifyContent: "center" },
   circleDone: { backgroundColor: colors.brandGreen, borderColor: colors.brandGreen },
-  check: { color: colors.cream, fontWeight: "700", fontSize: 14, lineHeight: 16 },
+  check: { color: colors.onSolid, fontWeight: "700", fontSize: 14, lineHeight: 16 },
   content: { flex: 1, alignSelf: "stretch", justifyContent: "center", paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   chevron: { fontSize: 24, color: colors.textSecondary, paddingRight: spacing.md },
-});
+}));

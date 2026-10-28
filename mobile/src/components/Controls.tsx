@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, ViewStyle } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, column, radii, spacing, type } from "../theme";
+import { colors, column, radii, spacing, type, themed, themedStyles } from "../theme";
 
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong. Try again.";
 
@@ -24,13 +24,13 @@ export function ScreenTitle({ children, subtitle }: { children: React.ReactNode;
 }
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "dangerGhost";
-const variantStyle: Record<ButtonVariant, { bg: string; pressed: string; text: string; border?: string }> = {
-  primary: { bg: colors.brandGreen, pressed: colors.brandPressed, text: colors.cream },
+const variantStyle = themed<Record<ButtonVariant, { bg: string; pressed: string; text: string; border?: string }>>(() => ({
+  primary: { bg: colors.brandGreen, pressed: colors.brandPressed, text: colors.onSolid },
   secondary: { bg: colors.surface, pressed: colors.surfaceSubtle, text: colors.brandGreen, border: colors.controlBorder },
   ghost: { bg: "transparent", pressed: colors.surfaceSubtle, text: colors.brandGreen },
-  danger: { bg: colors.danger, pressed: colors.dangerPressed, text: "#FFFFFF" },
+  danger: { bg: colors.danger, pressed: colors.dangerPressed, text: colors.onSolid },
   dangerGhost: { bg: "transparent", pressed: colors.dangerSurface, text: colors.danger },
-};
+}));
 
 export function Button({ title, onPress, disabled = false, variant = "primary", busy = false, accessibilityLabel, compact = false, style }: {
   title: string; onPress: () => void; disabled?: boolean; variant?: ButtonVariant; busy?: boolean; accessibilityLabel?: string; compact?: boolean; style?: ViewStyle;
@@ -41,7 +41,7 @@ export function Button({ title, onPress, disabled = false, variant = "primary", 
     style={({ pressed }) => [styles.button, compact && styles.compact, { backgroundColor: off && variant !== "ghost" && variant !== "dangerGhost" ? colors.disabledSurface : pressed ? v.pressed : v.bg },
       v.border ? { borderWidth: 1, borderColor: v.border } : null, style]}>
     <View style={styles.buttonRow}>
-      {busy ? <ActivityIndicator size="small" color={v.text} /> : null}
+      {busy ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
       <Text style={[type.buttonLabel, { color: off ? colors.textSecondary : v.text, textAlign: "center" }]}>{title}</Text>
     </View>
   </Pressable>;
@@ -74,9 +74,9 @@ export function Field({ label, value, onChangeText, multiline = false, placehold
 
 // A choice chip (radio) by default; `action` makes it a one-tap button like "Snooze 1 hour".
 export function Chip({ label, selected = false, onPress, accessibilityLabel, action = false }: { label: string; selected?: boolean; onPress: () => void; accessibilityLabel?: string; action?: boolean }) {
-  return <Pressable accessibilityRole={action ? "button" : "radio"} accessibilityState={action ? undefined : { checked: selected }} accessibilityLabel={accessibilityLabel ?? label} onPress={onPress}
+  return <Pressable accessibilityRole={action ? "button" : "radio"} accessibilityState={action ? undefined : { checked: selected }} aria-checked={action ? undefined : selected} accessibilityLabel={accessibilityLabel ?? label} onPress={onPress}
     style={({ pressed }) => [styles.chip, selected ? { backgroundColor: colors.brandGreen, borderColor: colors.brandGreen } : pressed ? { backgroundColor: colors.surfaceSubtle } : null]}>
-    <Text style={[type.buttonLabel, { fontSize: 15, color: selected ? colors.cream : colors.textPrimary }]}>{selected ? "✓ " : ""}{label}</Text>
+    <Text style={[type.buttonLabel, { fontSize: 15, color: selected ? colors.onSolid : colors.textPrimary }]}>{selected ? "✓ " : ""}{label}</Text>
   </Pressable>;
 }
 
@@ -85,14 +85,14 @@ export function Chips({ children }: { children: React.ReactNode }) {
 }
 
 export type BadgeTone = "new" | "updated" | "completed" | "email" | "error" | "neutral";
-const badgeTone: Record<BadgeTone, { bg: string; text: string }> = {
+const badgeTone = themed<Record<BadgeTone, { bg: string; text: string }>>(() => ({
   new: { bg: colors.successSurface, text: colors.brandGreen },
   updated: { bg: colors.accentSurface, text: colors.accent },
   completed: { bg: colors.successSurface, text: colors.success },
   email: { bg: colors.accentSurface, text: colors.accent },
   error: { bg: colors.dangerSurface, text: colors.danger },
   neutral: { bg: colors.surfaceSubtle, text: colors.textSecondary },
-};
+}));
 export function Badge({ label, tone }: { label: string; tone: BadgeTone }) {
   return <View style={[styles.badge, { backgroundColor: badgeTone[tone].bg }]}><Text style={[type.badgeLabel, { color: badgeTone[tone].text }]}>{label}</Text></View>;
 }
@@ -117,7 +117,70 @@ export function Notice({ tone = "neutral", title, children }: { tone?: "neutral"
   </View>;
 }
 
-const styles = StyleSheet.create({
+// Motion helpers. Each one holds still when the person has asked for reduced motion.
+const useReduceMotion = () => {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let live = true;
+    AccessibilityInfo.isReduceMotionEnabled().then(value => { if (live) setReduce(value); }, () => {});
+    const sub = AccessibilityInfo.addEventListener?.("reduceMotionChanged", setReduce);
+    return () => { live = false; sub?.remove(); };
+  }, []);
+  return reduce;
+};
+
+// Content that rises gently into place, for results arriving on screen.
+export function FadeIn({ children, delay = 0, style }: { children: React.ReactNode; delay?: number; style?: ViewStyle }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const reduce = useReduceMotion();
+  useEffect(() => {
+    if (reduce) { progress.setValue(1); return; }
+    const animation = Animated.timing(progress, { toValue: 1, duration: 220, delay, useNativeDriver: Platform.OS !== "web" });
+    animation.start();
+    return () => animation.stop();
+  }, [reduce]);
+  return <Animated.View style={[style, { opacity: progress, transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>{children}</Animated.View>;
+}
+
+// A live dot with a soft halo, for "the microphone is on".
+export function PulseDot({ color, size = 10 }: { color: string; size?: number }) {
+  const halo = useRef(new Animated.Value(0)).current;
+  const reduce = useReduceMotion();
+  useEffect(() => {
+    if (reduce) return;
+    const loop = Animated.loop(Animated.timing(halo, { toValue: 1, duration: 1400, useNativeDriver: Platform.OS !== "web" }));
+    loop.start();
+    return () => { loop.stop(); halo.setValue(0); };
+  }, [reduce]);
+  return <View style={{ width: size * 2.4, height: size * 2.4, alignItems: "center", justifyContent: "center" }} accessible={false}>
+    <Animated.View style={{ position: "absolute", width: size, height: size, borderRadius: size, backgroundColor: color,
+      opacity: halo.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }), transform: [{ scale: halo.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] }) }] }} />
+    <View style={{ width: size, height: size, borderRadius: size, backgroundColor: color }} />
+  </View>;
+}
+
+// Three dots that brighten in turn while Heedly is thinking.
+export function ThinkingDots({ color }: { color: string }) {
+  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
+  const reduce = useReduceMotion();
+  useEffect(() => {
+    if (reduce) return;
+    const native = Platform.OS !== "web";
+    const loop = Animated.loop(Animated.stagger(180, dots.map(dot => Animated.sequence([
+      Animated.timing(dot, { toValue: 1, duration: 320, useNativeDriver: native }),
+      Animated.timing(dot, { toValue: 0, duration: 320, useNativeDriver: native }),
+    ]))));
+    loop.start();
+    return () => { loop.stop(); dots.forEach(dot => dot.setValue(0)); };
+  }, [reduce]);
+  return <View style={{ flexDirection: "row", gap: 6, alignItems: "center", height: 16 }} accessible={false}>
+    {dots.map((dot, i) => <Animated.View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color,
+      opacity: reduce ? 0.7 : dot.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
+      transform: [{ translateY: reduce ? 0 : dot.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }] }} />)}
+  </View>;
+}
+
+const styles = themedStyles(() => ({
   flex: { flex: 1, backgroundColor: colors.background },
   page: { padding: spacing.lg, paddingBottom: spacing.xl, flexGrow: 1 },
   stack: { gap: spacing.md },
@@ -133,4 +196,4 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radii.card, padding: spacing.md, gap: spacing.xs },
   sectionHeader: { minHeight: 32, flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.xxs },
   notice: { borderRadius: radii.panel, padding: spacing.md, gap: spacing.xs },
-});
+}));
