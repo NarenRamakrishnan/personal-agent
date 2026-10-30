@@ -98,11 +98,11 @@ STORE_TRANSCRIPTS = _env_bool("STORE_TRANSCRIPTS", True)
 TRANSCRIPT_RETENTION_DAYS = _env_int("TRANSCRIPT_RETENTION_DAYS", 30)  # 0 keeps them until deleted
 PENDING_RETRY_LIMIT = _env_int("PENDING_RETRY_LIMIT", 10)
 # Seconds any one request may spend on model calls. The phone gives up on a request
-# after 15 s (mobile/src/api/client.ts), so this stays under that: past it a typed
-# parse keeps the person's words, a chunk is queued and retries wait for the next pass,
-# instead of the client's default 30 s plus a retry holding the request for a minute.
-# Live calls take 1-3 s.
-REQUEST_BUDGET_S = _env_int("REQUEST_BUDGET_S", 12, minimum=1)
+# after 28 s (mobile/src/api/client.ts) and Vercel stops the function at 30 s
+# (vercel.json), so this stays under both: past it a typed parse keeps the person's
+# words, a chunk is queued and retries wait for the next pass. Nemotron's thinking
+# makes a live parse of a whole talk take 7-12 s, so 12 s timed out too often.
+REQUEST_BUDGET_S = _env_int("REQUEST_BUDGET_S", 24, minimum=1)
 # A queued chunk the model answers but can't parse this many times is kept as a
 # plain reminder for review instead. Outages never count towards it.
 PENDING_MAX_ATTEMPTS = _env_int("PENDING_MAX_ATTEMPTS", 3, minimum=1)

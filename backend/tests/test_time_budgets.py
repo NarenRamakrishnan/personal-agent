@@ -3,7 +3,10 @@ limit holds across server processes, and turning transcripts off doesn't lose ch
 
 from datetime import datetime, timedelta, timezone
 
+import json
+import re
 import types
+from pathlib import Path
 
 import pytest
 from sqlmodel import select
@@ -105,7 +108,10 @@ def test_ending_and_retrying_a_session_fit_inside_the_phones_wait(client, monkey
     client.post(f"/sessions/{sid}/retry")
     client.post(f"/sessions/{sid}/end")
     assert budgets == [config.REQUEST_BUDGET_S] * 2
-    assert config.REQUEST_BUDGET_S < 15  # mobile/src/api/client.ts gives up at 15 s
+    client_ts = (Path(__file__).parents[2] / "mobile/src/api/client.ts").read_text()
+    phone_wait_s = int(re.search(r"controller\.abort\(\), (\d+)\)", client_ts).group(1)) / 1000
+    vercel = json.loads((Path(__file__).parents[1] / "vercel.json").read_text())
+    assert config.REQUEST_BUDGET_S < phone_wait_s < vercel["functions"]["app/main.py"]["maxDuration"]
 
 
 def test_the_catch_up_after_a_good_chunk_gets_only_what_the_chunk_left(client, monkeypatch):

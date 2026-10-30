@@ -38,7 +38,8 @@ export async function request<T>(path: string, method = "GET", body?: unknown): 
   // The shared key is an explicitly configured legacy/demo opt-in, not the default.
   const auth: Record<string, string> = process.env.EXPO_PUBLIC_API_KEY ? { "X-API-Key": process.env.EXPO_PUBLIC_API_KEY } : { Authorization: `Bearer ${await deviceAuth.getToken()}` };
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  // Long enough for the model's thinking (live parses take 7-12 s), above the server's 24 s budget.
+  const timer = setTimeout(() => controller.abort(), 28000);
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method, signal: controller.signal,
